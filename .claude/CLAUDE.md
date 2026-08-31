@@ -4,11 +4,14 @@
 
 > Rellenar al iniciar el proyecto. Todo lo demás en este archivo es doctrina fija y no debe editarse por proyecto.
 
-Desarrollar **{{NOMBRE_PROYECTO}}**: {{DESCRIPCION_EN_UNA_FRASE}}.
+Desarrollar **MaaS Decision Brief**: convertir un reto ambiguo en un brief
+accionable mediante un vertical slice demostrable sobre Huawei Cloud MaaS.
 
-- **Usuarios:** {{QUIENES_LO_USAN}}
-- **Dominio:** {{MERCADO_O_SECTOR}}
-- **Diferenciador:** {{QUE_LO_HACE_DISTINTO}}
+- **Usuarios:** equipos que presentan una solución GenAI y jurados que necesitan
+  comprender su valor y evidencia en pocos minutos.
+- **Dominio:** prototipado y soporte a decisiones con modelos generativos.
+- **Diferenciador:** modo real o simulado siempre visible, streaming, métricas y
+  evaluación repetible desde el primer vertical slice.
 
 Debes priorizar: rendimiento, calidad técnica, diseño y posicionamiento en buscadores.
 

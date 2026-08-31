@@ -5,7 +5,7 @@ Cómo está construido el proyecto y por qué. Describe el estado actual, no el 
 | Documento | Contenido |
 | --- | --- |
 | [`decisions/`](decisions/) | ADRs: decisiones técnicas con su contexto y consecuencias |
-| _(pendiente)_ `stack.md` | Tecnologías en uso y qué resuelve cada una |
+| [`stack.md`](stack.md) | Tecnologías en uso y qué resuelve cada una |
 | _(pendiente)_ `estructura.md` | Organización de carpetas del código y qué vive en cada una |
 | _(pendiente)_ `modelo-de-datos.md` | Entidades, relaciones y reglas de integridad |
 

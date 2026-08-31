@@ -4,9 +4,9 @@ Cómo se trabaja en este repositorio. Todo lo que alguien necesita para ser prod
 
 | Documento | Contenido |
 | --- | --- |
-| _(pendiente)_ `entorno.md` | Requisitos, instalación, variables de entorno, comandos habituales |
+| [`entorno.md`](entorno.md) | Requisitos, instalación, variables de entorno, comandos habituales |
 | _(pendiente)_ `convenciones.md` | Nomenclatura, estructura de componentes, estilo de código |
-| _(pendiente)_ `testing.md` | Qué se prueba, con qué y cuándo |
+| [`testing.md`](testing.md) | Pruebas, evaluación GenAI y smoke test live |
 | _(pendiente)_ `flujo-git.md` | Ramas, mensajes de commit, revisión |
 
 **Convención de commits del repositorio:** en español, resumen en imperativo ("Corrige…", "Agrega…", "Actualiza…"). Ver [`.github/copilot-instructions.md`](../../.github/copilot-instructions.md).

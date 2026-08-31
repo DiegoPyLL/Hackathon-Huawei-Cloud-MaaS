@@ -1,86 +1,101 @@
-# Plantilla de proyecto
+![alt text](image.png)
 
-Repositorio base para proyectos web nuevos. Trae la doctrina de desarrollo, la biblioteca de skills de Claude como submódulo y una estructura de documentación ya definida, para no volver a decidir lo mismo en cada proyecto.
+# MaaS Decision Brief
 
-## Inicio rápido
+Vertical slice para Huawei Cloud ModelArts Studio (MaaS): convierte un reto
+ambiguo en un brief accionable mediante una experiencia web con streaming,
+métricas y modo de ejecución visible.
 
-```powershell
-pwsh -File scripts/bootstrap.ps1
-```
+El objetivo actual no es fingir un producto terminado, sino demostrar en pocos
+minutos que la integración completa funciona y se puede evaluar.
 
-Inicializa git y monta las skills. En otros sistemas, el equivalente manual:
+## Demo en menos de dos minutos
+
+No requiere dependencias Python ni credenciales:
 
 ```bash
-git init -b main
-git submodule add https://github.com/DiegoPyLL/FullSkills.git .claude/skills
+MAAS_MODE=mock python3 -m src.maas_demo
 ```
 
-Después:
+Abrir <http://127.0.0.1:8000>. La interfaz mostrará claramente `MOCK`.
 
-1. Completar el bloque `Objetivo` de [`.claude/CLAUDE.md`](.claude/CLAUDE.md) — es lo único que se edita por proyecto; el resto es doctrina fija.
-2. Rellenar los `{{PLACEHOLDER}}` de [`docs/design/design-system.md`](docs/design/design-system.md).
-3. Registrar el stack elegido como primer ADR en [`docs/architecture/decisions/`](docs/architecture/decisions/).
-4. Borrar las plantillas que el proyecto no vaya a usar.
+Para ejecutar contra Huawei MaaS:
+
+```bash
+cp .env.example .env
+# Completar MAAS_API_KEY y cambiar MAAS_MODE=live
+python3 -m src.maas_demo
+```
+
+La aplicación nunca cambia silenciosamente de `live` a `mock`. Si Huawei MaaS
+falla, la demo muestra el error.
+
+## Evidencia verificable
+
+```bash
+# Pruebas unitarias y de integración HTTP
+python3 -m unittest discover -s tests -v
+
+# Dataset mínimo determinista
+python3 scripts/evaluar.py --mode mock
+
+# Con el servidor iniciado
+python3 scripts/prueba-humo.py --require-mode mock
+
+# Antes de presentar evidencia cloud real
+python3 scripts/evaluar.py --mode live
+python3 scripts/prueba-humo.py --url https://URL-DESPLEGADA --require-mode live
+```
+
+El último comando falla si el despliegue responde en `mock`; así una simulación
+no puede presentarse accidentalmente como integración real.
+
+## HuaweiCloud DevKit
+
+La configuración MCP compartida está en [`.codex/config.toml`](.codex/config.toml).
+Requiere Node.js 22 o superior:
+
+```bash
+python3 scripts/configurar-devkit-huawei.py
+python3 scripts/configurar-devkit-huawei.py --auth
+```
+
+Consulta [`docs/development/entorno.md`](docs/development/entorno.md) para el
+procedimiento completo. Nunca se versionan `.env` ni credenciales reales.
+
+## Arquitectura
+
+```text
+Navegador
+   │ POST /api/chat/stream (SSE)
+   ▼
+ChatService ── contrato propio ──┬── MockProvider (local y determinista)
+                                 └── MaaSProvider (Huawei MaaS V2)
+```
+
+El dominio no conoce URLs, autenticación ni eventos del proveedor. El adaptador
+traduce el contrato de Huawei y preserva TLS. La respuesta final expone modo,
+modelo y latencia.
 
 ## Estructura
 
-```
-.
-├── .claude/
-│   ├── CLAUDE.md            Doctrina de desarrollo (versionado)
-│   ├── settings.json        Configuración compartida (versionado)
-│   ├── settings.local.json  Configuración personal (ignorado)
-│   └── skills/              ← submódulo FullSkills
-├── .github/
-│   └── copilot-instructions.md
-├── docs/                    Documentación del proyecto — ver docs/README.md
-├── scripts/
-│   └── bootstrap.ps1
-└── src/                     Lo crea cada proyecto según su stack
+```text
+src/maas_demo/      Aplicación, proveedor MaaS y frontend
+tests/              Contratos, streaming y API HTTP
+evals/              Casos repetibles de evaluación
+scripts/            Instalación, evaluación y smoke test
+docs/product/       Visión, alcance y guion de demo
+docs/architecture/  Stack y decisiones técnicas
+docs/operations/    Despliegue y comprobación live
 ```
 
-Reglas de raíz: **ningún documento suelto fuera de `docs/`** salvo este README. Los scripts van a `scripts/`, no a la raíz. Todo lo generado (`node_modules/`, `dist/`, `.env`) está cubierto por [`.gitignore`](.gitignore).
+## Estado
 
-## Documentación
+- Vertical slice local: operativo en modo `mock`.
+- Adaptador Huawei MaaS V2: implementado y probado con contrato simulado.
+- Llamada cloud real: requiere una API key MaaS y servicio habilitado.
+- Despliegue público: pendiente de elegir y aprovisionar el runtime Huawei.
 
-La organización de `docs/` y sus reglas están en [`docs/README.md`](docs/README.md). En resumen:
-
-| Carpeta | Responde a |
-| --- | --- |
-| `product/` | Qué construimos y para quién |
-| `design/` | Cómo se ve y se siente |
-| `architecture/` | Cómo está construido y por qué (incluye ADRs) |
-| `development/` | Cómo se trabaja en él |
-| `performance-seo/` | Cómo se mide la calidad |
-| `operations/` | Cómo vive en producción |
-
-## Skills
-
-[`FullSkills`](https://github.com/DiegoPyLL/FullSkills) montado como submódulo en `.claude/skills/`. Cada carpeta queda al primer nivel, que es donde Claude Code descubre las skills.
-
-| Skill | Enfoque |
-| --- | --- |
-| `/indice` | Enrutador maestro entre skills e inventario del repositorio |
-| `/security` | Seguridad ofensiva, defensiva, forense, cloud, contenedores |
-| `/backend` | APIs, datos, concurrencia, fiabilidad, rendimiento, entrega |
-| `/seo` | Auditoría de SEO técnico |
-| `/mobile` | Plataforma y seguridad iOS/Android |
-
-`ai/`, `cloud/` y `frontend-ux-ui/` están reservadas y aún vacías: sin `SKILL.md` no se descubren.
-
-```bash
-# Al clonar un proyecto por primera vez, o si .claude/skills aparece vacío
-git submodule update --init --recursive
-
-# Traer la última versión de las skills
-git submodule update --remote --merge .claude/skills
-git add .claude/skills && git commit -m "Actualiza biblioteca de skills"
-```
-
-El submódulo apunta a un commit fijo: las skills no cambian bajo los pies del proyecto hasta que se actualiza a propósito. Su contenido **no se edita desde aquí** — los cambios se hacen en el repositorio `FullSkills`.
-
-## Convenciones
-
-- **Commits en español**, resumen en imperativo ("Corrige…", "Agrega…", "Actualiza…"). Ver [`.github/copilot-instructions.md`](.github/copilot-instructions.md).
-- **Documentos en kebab-case**, sin acentos ni ñ en los nombres de archivo.
-- **Las decisiones técnicas se registran como ADR**, no se explican en un commit.
+La visión y lo que queda explícitamente fuera están en
+[`docs/product/vision.md`](docs/product/vision.md) y
+[`docs/product/alcance.md`](docs/product/alcance.md).

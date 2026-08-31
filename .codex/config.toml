@@ -1,0 +1,8 @@
+# BEGIN HUAWEICLOUD DEVKIT (managed by scripts/setup-huaweicloud-devkit.py)
+[mcp_servers.huaweicloud-devkit]
+command = "npx"
+args = ["-y", "-p", "huaweicloud-devkit@1.0.2", "huaweicloud-devkit-mcp"]
+env_vars = ["HW_ACCESS_KEY", "HW_SECRET_KEY", "HW_REGION"]
+startup_timeout_sec = 30
+default_tools_approval_mode = "writes"
+# END HUAWEICLOUD DEVKIT

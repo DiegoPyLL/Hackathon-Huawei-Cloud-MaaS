@@ -1,0 +1,11 @@
+.git
+.claude
+.codex
+.env
+.env.*
+!.env.example
+__pycache__
+*.pyc
+tests
+evals
+docs

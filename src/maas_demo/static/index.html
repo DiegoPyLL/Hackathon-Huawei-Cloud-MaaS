@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Vertical slice demostrable sobre Huawei Cloud ModelArts Studio MaaS."
+    />
+    <title>MaaS Decision Brief</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Huawei Cloud · ModelArts Studio</p>
+          <h1>Convierte un reto ambiguo en una decisión demostrable.</h1>
+          <p class="lede">
+            Un vertical slice con streaming, métricas y modo de ejecución visible.
+          </p>
+        </div>
+        <div id="mode-badge" class="badge" aria-live="polite">Comprobando…</div>
+      </header>
+
+      <section class="workspace" aria-labelledby="challenge-title">
+        <div class="input-panel">
+          <h2 id="challenge-title">Describe el reto</h2>
+          <label for="prompt">¿Qué decisión necesitas tomar?</label>
+          <textarea
+            id="prompt"
+            maxlength="4000"
+            rows="7"
+            placeholder="Ej.: Queremos reducir el tiempo de atención sin perder trazabilidad…"
+          ></textarea>
+          <div class="examples" aria-label="Ejemplos">
+            <button type="button" data-prompt="Diseña una demo de IA que un jurado entienda en tres minutos.">
+              Demo en 3 minutos
+            </button>
+            <button type="button" data-prompt="Reduce el tiempo de respuesta de soporte manteniendo revisión humana.">
+              Soporte asistido
+            </button>
+          </div>
+          <button id="submit" class="primary" type="button">Generar brief</button>
+        </div>
+
+        <article class="output-panel" aria-labelledby="result-title">
+          <div class="output-header">
+            <h2 id="result-title">Brief de decisión</h2>
+            <span id="status">Listo</span>
+          </div>
+          <pre id="answer" tabindex="0">La respuesta aparecerá aquí.</pre>
+          <dl class="metrics">
+            <div><dt>Modo</dt><dd id="metric-mode">—</dd></div>
+            <div><dt>Modelo</dt><dd id="metric-model">—</dd></div>
+            <div><dt>Latencia</dt><dd id="metric-latency">—</dd></div>
+          </dl>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

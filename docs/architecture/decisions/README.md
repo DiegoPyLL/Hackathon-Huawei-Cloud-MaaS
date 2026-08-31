@@ -18,3 +18,4 @@ Elección de framework, base de datos o proveedor · estrategia de renderizado (
 | # | Decisión | Estado |
 | --- | --- | --- |
 | [0000](0000-plantilla.md) | Plantilla | Plantilla |
+| [0001](0001-vertical-slice-maas.md) | Vertical slice desacoplado de Huawei MaaS | Aceptada |

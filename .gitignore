@@ -6,9 +6,14 @@
 !.claude/skills
 
 # Entorno y secretos
-#.env
-#.env.*
-#!.env.example
+.env
+.env.*
+!.env.example
+
+# Codex
+# Solo se comparte la configuracion MCP del proyecto.
+.codex/*
+!.codex/config.toml
 
 # Dependencias
 node_modules/
@@ -27,6 +32,12 @@ out/
 # Cobertura y reportes
 coverage/
 .lighthouseci/
+evals/results/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
 
 # Sistema operativo
 Thumbs.db
