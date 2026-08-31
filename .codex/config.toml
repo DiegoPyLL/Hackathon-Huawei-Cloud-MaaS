@@ -1,4 +1,4 @@
-# BEGIN HUAWEICLOUD DEVKIT (managed by scripts/setup-huaweicloud-devkit.py)
+# BEGIN HUAWEICLOUD DEVKIT (gestionado por scripts/configurar-devkit-huawei.py)
 [mcp_servers.huaweicloud-devkit]
 command = "npx"
 args = ["-y", "-p", "huaweicloud-devkit@1.0.2", "huaweicloud-devkit-mcp"]

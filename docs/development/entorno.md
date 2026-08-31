@@ -3,17 +3,19 @@
 ## Requisitos
 
 - Python 3.10 o superior.
-- Node.js 22 o superior, instalado en el mismo entorno donde se ejecuta Codex.
-- Codex CLI o la extension de Codex con acceso al proyecto.
+- Node.js 22 o superior, instalado en el mismo entorno donde se ejecutan los
+  clientes MCP.
+- Codex CLI, Claude Code o ambos con acceso al proyecto.
 - Una cuenta de Huawei Cloud. Para operaciones reales, usar un usuario IAM
   exclusivo para el hackathon y con permisos minimos.
 
 ## HuaweiCloud DevKit
 
-El proyecto conecta Codex con HuaweiCloud DevKit mediante el servidor MCP
-declarado en [`.codex/config.toml`](../../.codex/config.toml). La version del
-paquete esta fijada para que todos los integrantes utilicen las mismas
-herramientas.
+El proyecto conecta Codex y Claude Code con HuaweiCloud DevKit mediante el mismo
+servidor MCP. La configuración compartida está declarada en
+[`.codex/config.toml`](../../.codex/config.toml) para Codex y
+[`.mcp.json`](../../.mcp.json) para Claude Code. La versión del paquete está
+fijada para que todos los integrantes utilicen las mismas herramientas.
 
 Desde la raiz del repositorio:
 
@@ -21,14 +23,21 @@ Desde la raiz del repositorio:
 python3 scripts/configurar-devkit-huawei.py
 ```
 
-El comando valida Node.js y Codex, conserva cualquier otra configuracion de
-`.codex/config.toml`, configura el servidor MCP e instala KooCLI.
+El comando valida Node.js y detecta cuáles clientes están disponibles, conserva
+los otros servidores de ambos archivos, configura HuaweiCloud DevKit e instala
+KooCLI. El objetivo predeterminado es `auto`; se puede seleccionar un cliente o
+exigir ambos de forma explícita.
 
 Opciones disponibles:
 
 ```bash
 # Mostrar acciones sin instalar ni modificar archivos
 python3 scripts/configurar-devkit-huawei.py --dry-run
+
+# Configurar solamente uno de los clientes MCP
+python3 scripts/configurar-devkit-huawei.py --target codex
+python3 scripts/configurar-devkit-huawei.py --target claude
+python3 scripts/configurar-devkit-huawei.py --target both
 
 # Configurar tambien las credenciales de forma interactiva
 python3 scripts/configurar-devkit-huawei.py --auth
@@ -37,11 +46,18 @@ python3 scripts/configurar-devkit-huawei.py --auth
 python3 scripts/configurar-devkit-huawei.py --skip-koocli
 ```
 
-Después de la instalación, reiniciar Codex y ejecutar `/mcp`. También se puede
-comprobar la configuración desde la terminal:
+La autenticación no lee `.env` ni acepta secretos como argumentos. Las
+referencias `HW_ACCESS_KEY`, `HW_SECRET_KEY` y `HW_REGION` del archivo compartido
+de Claude Code se resuelven desde el entorno y nunca contienen valores reales.
+
+Después de la instalación, reiniciar cada cliente y ejecutar `/mcp`. Claude Code
+pedirá aprobar el servidor definido por el proyecto la primera vez. La aprobación
+del servidor no elimina las confirmaciones de sus herramientas con efectos. La
+configuración también se puede comprobar desde la terminal:
 
 ```bash
 codex mcp list
+claude mcp list
 ```
 
 ## Aplicación

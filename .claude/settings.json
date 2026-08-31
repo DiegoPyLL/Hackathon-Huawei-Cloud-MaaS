@@ -1,4 +1,5 @@
 {
+  "enabledMcpjsonServers": ["huaweicloud-devkit"],
   "permissions": {
     "allow": [
       "Bash(git status)",

@@ -108,27 +108,21 @@ Considerar:
 - Dependencias actualizadas.
 - Evitar código inseguro.
 
----
+### HuaweiCloud DevKit y MCP
 
-## 5. Responsive Design
+- HuaweiCloud DevKit está fijado y compartido mediante `.mcp.json`; tratar el
+  servidor MCP como software con los permisos del usuario que ejecuta Claude.
+- `HW_ACCESS_KEY`, `HW_SECRET_KEY`, `HW_REGION` y `MAAS_API_KEY` solo se obtienen
+  del entorno o del flujo interactivo autorizado. Nunca mostrarlas, registrarlas,
+  versionarlas ni enviarlas al navegador.
+- Antes de crear, modificar o eliminar recursos cloud, mostrar el comando o plan
+  exacto y obtener autorización explícita. Mantener confirmación por acción para
+  herramientas MCP con efectos externos.
+- Verificar en documentación oficial o HuaweiCloud DevKit los modelos, regiones,
+  endpoints, precios y cuotas, porque son datos volátiles.
+- Mantener siempre visible si una ejecución es `mock` o `live`; un fallo `live`
+  nunca se presenta como éxito `mock`.
 
-La experiencia debe ser excelente en cualquier dispositivo.
-
-Diseñar para los siguientes breakpoints:
-
-- XL
-- L
-- M
-- S
-
-No deben existir problemas de:
-
-- Overflow.
-- Layout Shift.
-- Escalado incorrecto.
-- Contenido inaccesible.
-
----
 
 # Optimización del Código
 
@@ -205,10 +199,8 @@ Antes de considerar una tarea terminada, verificar:
 - El código es más simple que antes.
 - No existe código muerto.
 - No se degradó el rendimiento.
-- No se degradó el SEO.
 - No se degradó la accesibilidad.
 - No se degradó la seguridad.
-- Funciona correctamente en XL, L, M y S.
 - No introduce complejidad innecesaria.
 - Mantiene la consistencia visual del proyecto.
 - Cumple las buenas prácticas de desarrollo.

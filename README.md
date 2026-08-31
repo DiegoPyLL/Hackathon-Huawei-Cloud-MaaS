@@ -52,16 +52,28 @@ no puede presentarse accidentalmente como integración real.
 
 ## HuaweiCloud DevKit
 
-La configuración MCP compartida está en [`.codex/config.toml`](.codex/config.toml).
-Requiere Node.js 22 o superior:
+La configuración MCP compartida está disponible para Codex en
+[`.codex/config.toml`](.codex/config.toml) y para Claude Code en
+[`.mcp.json`](.mcp.json). Requiere Node.js 22 o superior:
 
 ```bash
+# Detectar, configurar y comprobar los clientes instalados
 python3 scripts/configurar-devkit-huawei.py
+
+# Configurar credenciales mediante el flujo interactivo de Huawei
 python3 scripts/configurar-devkit-huawei.py --auth
+
+# Trabajar solamente con uno de los clientes
+python3 scripts/configurar-devkit-huawei.py --target codex
+python3 scripts/configurar-devkit-huawei.py --target claude
+
+# Exigir que ambos clientes estén instalados
+python3 scripts/configurar-devkit-huawei.py --target both
 ```
 
 Consulta [`docs/development/entorno.md`](docs/development/entorno.md) para el
-procedimiento completo. Nunca se versionan `.env` ni credenciales reales.
+procedimiento completo. Claude Code solicita aprobar el servidor MCP compartido
+la primera vez. Nunca se versionan `.env` ni credenciales reales.
 
 ## Arquitectura
 

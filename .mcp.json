@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "huaweicloud-devkit": {
+      "type": "stdio",
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx",
+        "-y",
+        "-p",
+        "huaweicloud-devkit@1.0.2",
+        "huaweicloud-devkit-mcp"
+      ],
+      "env": {
+        "HW_ACCESS_KEY": "${HW_ACCESS_KEY:-}",
+        "HW_SECRET_KEY": "${HW_SECRET_KEY:-}",
+        "HW_REGION": "${HW_REGION:-}"
+      }
+    }
+  }
+}
