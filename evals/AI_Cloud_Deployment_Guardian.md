@@ -55,13 +55,19 @@ El cambio parece mejorar capacidad, pero puede generar:
 Crear un agente capaz de:
 
 1. Leer el `git diff` de un Pull Request. (Script para traer el código)
-2. Identificar archivos relevantes.
+2. Identificar archivos relevantes. (índice de relevancia, que tanto importa un archivo)
+
+
 3. Analizar riesgos técnicos.
-4. Consultar herramientas cuando necesite información adicional.
 5. Validar reglas deterministas.
-6. Estimar impacto en costos.
+4. Consultar herramientas cuando necesite información adicional.
 7. Asignar severidad a los problemas encontrados.
+
+
+6. Estimar impacto en costos.
+
 8. Aprobar, advertir o bloquear el despliegue.
+
 9. Generar automáticamente un parche seguro.
 
 ---
@@ -72,14 +78,14 @@ Crear un agente capaz de:
                     GitHub
                        |
                        |
-                   Pull Request
+                  Pull Request
                        |
                        v
-                  Git Diff
+                   Git Diff
                        |
                        v
-                 Backend API
-                   FastAPI
+                  Backend API
+                    FastAPI
                        |
                        v
               Huawei Cloud MaaS
