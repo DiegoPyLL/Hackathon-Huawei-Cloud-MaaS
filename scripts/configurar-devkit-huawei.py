@@ -103,16 +103,15 @@ def check_node() -> tuple[str, str]:
     return node, version
 
 
-def check_codex() -> tuple[str, str]:
-    codex = executable("codex")
-    version = command_output([codex, "--version"])
-    return codex, version
+def check_client(name: str) -> tuple[str, str] | None:
+    """Devuelve ruta y version del CLI, o None si no esta instalado.
 
-
-def check_claude() -> tuple[str, str]:
-    claude = executable("claude")
-    version = command_output([claude, "--version"])
-    return claude, version
+    La configuracion MCP se escribe igual: el CLI solo sirve para verificarla.
+    """
+    path = shutil.which(name)
+    if path is None:
+        return None
+    return path, command_output([path, "--version"])
 
 
 def resolve_target(target: str) -> str:
@@ -125,9 +124,9 @@ def resolve_target(target: str) -> str:
         return "both"
     if has_codex:
         return "codex"
-    if has_claude:
-        return "claude"
-    raise SetupError("No se encontro Codex ni Claude Code en PATH.")
+    # Sin CLI en PATH (por ejemplo, con la extension de VSCode) se configura
+    # Claude Code igual: solo se omite la verificacion final.
+    return "claude"
 
 
 def update_codex_config(*, dry_run: bool) -> bool:
@@ -277,15 +276,16 @@ def main() -> int:
         clients: list[tuple[str, str]] = []
 
         print(f"Node.js: {node_version}")
-        if target in ("codex", "both"):
-            codex, codex_version = check_codex()
-            clients.append(("Codex", codex))
-            print(f"Codex: {codex_version}")
-
-        if target in ("claude", "both"):
-            claude, claude_version = check_claude()
-            clients.append(("Claude Code", claude))
-            print(f"Claude Code: {claude_version}")
+        for label, name in (("Codex", "codex"), ("Claude Code", "claude")):
+            if target not in (name, "both"):
+                continue
+            found = check_client(name)
+            if found is None:
+                print(f"{label}: sin CLI en PATH; se omite la verificacion final.")
+                continue
+            path, version = found
+            clients.append((label, path))
+            print(f"{label}: {version}")
 
         # Validar todos los ejecutables antes de modificar cualquiera de los archivos.
         if target in ("codex", "both"):
@@ -328,7 +328,7 @@ def main() -> int:
         )
         return error.returncode or 1
 
-    client_names = " y ".join(name for name, _ in clients)
+    client_names = " y ".join(name for name, _ in clients) or target
     print(
         f"\nHuaweiCloud DevKit quedo configurado para {client_names}. "
         "Reinicia cada cliente y verifica con /mcp."

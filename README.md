@@ -50,6 +50,16 @@ python3 scripts/prueba-humo.py --url https://URL-DESPLEGADA --require-mode live
 El último comando falla si el despliegue responde en `mock`; así una simulación
 no puede presentarse accidentalmente como integración real.
 
+## Skills de Claude (FullSkills)
+
+La biblioteca de skills vive en `.claude/skills` como submódulo git. Tras clonar
+el repositorio:
+
+```bash
+git submodule add https://github.com/DiegoPyLL/FullSkills.git .claude/skills
+git submodule update --init --recursive
+```
+
 ## HuaweiCloud DevKit
 
 La configuración MCP compartida está disponible para Codex en
