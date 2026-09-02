@@ -8,7 +8,7 @@ La aplicación se entrega como un contenedor HTTP sin estado:
 
 ```bash
 docker build -t maas-decision-brief .
-docker run --rm -p 8000:8000 --env-file .env maas-decision-brief
+docker run --rm -p 8080:8080 --env-file .env maas-decision-brief
 ```
 
 `.dockerignore` excluye `.env`, configuración de agentes, pruebas y documentación.

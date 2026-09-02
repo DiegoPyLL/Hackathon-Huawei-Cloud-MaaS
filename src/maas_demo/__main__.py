@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Demo web de Huawei Cloud MaaS.")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=8080)
     return parser.parse_args()
 
 
@@ -30,7 +30,8 @@ def main() -> int:
         return 2
 
     server = create_server(config, host=args.host, port=args.port)
-    print(f"Huawei MaaS demo: http://{args.host}:{server.server_port}")
+    url = f"http://{args.host}:{server.server_port}"
+    print(f"Huawei MaaS demo: \033[36m{url}\033[0m")
     print(f"Modo: {config.mode} · Modelo: {config.model}")
     if config.mode == "mock":
         print("MOCK visible: no se realizarán llamadas a Huawei Cloud.")

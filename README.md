@@ -9,6 +9,51 @@ métricas y modo de ejecución visible.
 El objetivo actual no es fingir un producto terminado, sino demostrar en pocos
 minutos que la integración completa funciona y se puede evaluar.
 
+## Clonar el repo de skills 
+
+La biblioteca de skills vive en `.claude/skills` como submódulo git. Tras clonar
+el repositorio:
+
+```bash
+git submodule add https://github.com/DiegoPyLL/FullSkills.git .claude/skills
+git submodule update --init --recursive
+```
+
+## Luego instalar HuaweiCloud DevKit
+
+La configuración MCP compartida está disponible para Codex en
+[`.codex/config.toml`](.codex/config.toml) y para Claude Code en
+[`.mcp.json`](.mcp.json). 
+
+# *Requiere Node.js 22 o superior*
+
+```bash
+# Detectar, configurar y comprobar los clientes instalados
+python3 scripts/configurar-devkit-huawei.py
+
+# Configurar credenciales mediante el flujo interactivo de Huawei
+python3 scripts/configurar-devkit-huawei.py --auth
+
+# Trabajar solamente con uno de los clientes
+python3 scripts/configurar-devkit-huawei.py --target codex
+python3 scripts/configurar-devkit-huawei.py --target claude
+
+# Exigir que ambos clientes estén instalados
+python3 scripts/configurar-devkit-huawei.py --target both
+```
+
+Consulta [`docs/development/entorno.md`](docs/development/entorno.md) para el
+procedimiento completo. Claude Code solicita aprobar el servidor MCP compartido
+la primera vez. Nunca se versionan `.env` ni credenciales reales.
+
+## Ejecutar el panel
+
+```bash
+python3 -m src.maas_demo
+```
+
+Abrir <http://127.0.0.1:8080>.
+
 ## Demo en menos de dos minutos
 
 No requiere dependencias Python ni credenciales:
@@ -17,7 +62,7 @@ No requiere dependencias Python ni credenciales:
 MAAS_MODE=mock python3 -m src.maas_demo
 ```
 
-Abrir <http://127.0.0.1:8000>. La interfaz mostrará claramente `MOCK`.
+Abrir <http://127.0.0.1:8080>. La interfaz mostrará claramente `MOCK`.
 
 Para ejecutar contra Huawei MaaS:
 
@@ -50,40 +95,6 @@ python3 scripts/prueba-humo.py --url https://URL-DESPLEGADA --require-mode live
 El último comando falla si el despliegue responde en `mock`; así una simulación
 no puede presentarse accidentalmente como integración real.
 
-## Skills de Claude (FullSkills)
-
-La biblioteca de skills vive en `.claude/skills` como submódulo git. Tras clonar
-el repositorio:
-
-```bash
-git submodule add https://github.com/DiegoPyLL/FullSkills.git .claude/skills
-git submodule update --init --recursive
-```
-
-## HuaweiCloud DevKit
-
-La configuración MCP compartida está disponible para Codex en
-[`.codex/config.toml`](.codex/config.toml) y para Claude Code en
-[`.mcp.json`](.mcp.json). Requiere Node.js 22 o superior:
-
-```bash
-# Detectar, configurar y comprobar los clientes instalados
-python3 scripts/configurar-devkit-huawei.py
-
-# Configurar credenciales mediante el flujo interactivo de Huawei
-python3 scripts/configurar-devkit-huawei.py --auth
-
-# Trabajar solamente con uno de los clientes
-python3 scripts/configurar-devkit-huawei.py --target codex
-python3 scripts/configurar-devkit-huawei.py --target claude
-
-# Exigir que ambos clientes estén instalados
-python3 scripts/configurar-devkit-huawei.py --target both
-```
-
-Consulta [`docs/development/entorno.md`](docs/development/entorno.md) para el
-procedimiento completo. Claude Code solicita aprobar el servidor MCP compartido
-la primera vez. Nunca se versionan `.env` ni credenciales reales.
 
 ## Arquitectura
 

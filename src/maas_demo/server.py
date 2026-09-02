@@ -127,6 +127,6 @@ def create_handler(config: Config):
 
 
 def create_server(
-    config: Config, *, host: str = "127.0.0.1", port: int = 8000
+    config: Config, *, host: str = "127.0.0.1", port: int = 8080
 ) -> ThreadingHTTPServer:
     return ThreadingHTTPServer((host, port), create_handler(config))

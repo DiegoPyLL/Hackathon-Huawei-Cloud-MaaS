@@ -12,7 +12,7 @@ import urllib.request
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prueba HTTP de humo del vertical slice.")
-    parser.add_argument("--url", default="http://127.0.0.1:8000")
+    parser.add_argument("--url", default="http://127.0.0.1:8080")
     parser.add_argument("--require-mode", choices=("mock", "live"))
     return parser.parse_args()
 
@@ -66,9 +66,18 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print(
-        f"APROBADO: estado={health['status']} modo={done['mode']} "
-        f"modelo={done['model']} latencia={done['latency_ms']} ms"
+    
+    #TODO("Cambiar cuando se tengan datos reales")
+    print(f"""APROBADO: 
+
+    estado={health['status']} 
+    
+    modo={done['mode']}    
+    
+    modelo={done['model']} 
+    
+    latencia={done['latency_ms']} ms    
+    """
     )
     return 0
 
