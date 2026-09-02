@@ -1,7 +1,5 @@
 # 0001 — Vertical slice desacoplado de Huawei MaaS
 
-> Estado: Aceptada · Fecha: 31-08-2026
-
 ## Contexto
 
 El repositorio era una plantilla web sin aplicación. La hackathon exige demostrar

@@ -1,0 +1,22 @@
+{
+  "_comment": "Coste relativo por instancia, normalizado a c7.large = 1. Sirve para medir variación, no para facturar.",
+  "default_units": 1,
+  "flavor_pattern": "(?:flavor|instance|instance_type|machine_type|size)\\s*[:=]\\s*[\"']?([a-z0-9]+\\.[a-z0-9]+)[\"']?",
+  "units": {
+    "c7.large": 1,
+    "c7.xlarge": 2,
+    "c7.2xlarge": 4,
+    "c7.4xlarge": 8,
+    "c7.8xlarge": 16,
+    "c7.16xlarge": 32,
+    "c7.32xlarge": 64,
+    "s6.small": 0.5,
+    "s6.medium": 0.75,
+    "s6.large": 1,
+    "s6.xlarge": 2,
+    "m7.large": 1.3,
+    "m7.xlarge": 2.6,
+    "m7.4xlarge": 10.4,
+    "m7.8xlarge": 20.8
+  }
+}

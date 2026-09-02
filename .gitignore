@@ -1,1 +1,60 @@
-# Dejar todo expuesto
+
+# Claude Code
+# Se versiona la configuración compartida del proyecto; nunca la local ni el estado.
+.claude/*
+!.claude/CLAUDE.md
+!.claude/settings.json
+!.claude/skills
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Codex
+# Solo se comparte la configuracion MCP del proyecto.
+.codex/*
+!.codex/config.toml
+
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Build y caché
+dist/
+build/
+out/
+.next/
+.astro/
+.turbo/
+.cache/
+*.tsbuildinfo
+
+# Cobertura y reportes
+coverage/
+.lighthouseci/
+evals/results/
+
+# Análisis de Pull Requests: pueden contener secretos del diff analizado.
+pr_*.json
+!tests/fixtures/pr_*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Sistema operativo
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editores
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

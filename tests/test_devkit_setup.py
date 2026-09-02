@@ -10,6 +10,7 @@ from unittest import mock
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1]
     / "scripts"
+    / "ejecutablesBase"
     / "configurar-devkit-huawei.py"
 )
 SPEC = importlib.util.spec_from_file_location("configurar_devkit_huawei", SCRIPT_PATH)

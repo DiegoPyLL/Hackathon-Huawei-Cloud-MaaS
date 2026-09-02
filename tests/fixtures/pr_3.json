@@ -1,0 +1,257 @@
+{
+  "repository": "DiegoPyLL/Hackathon-Huawei-Cloud-MaaS",
+  "pull_request": {
+    "number": 3,
+    "title": "Brecha seguridad",
+    "state": "open",
+    "draft": false,
+    "author": "DiegoPyLL",
+    "base_branch": "main",
+    "head_branch": "brecha-seguridad",
+    "base_sha": "2c8a1859df85458d4331b951ca56698c41a1e06f",
+    "head_sha": "783266586540ec8d19ee3d616a5147b3e7d43a4b",
+    "html_url": "https://github.com/DiegoPyLL/Hackathon-Huawei-Cloud-MaaS/pull/3"
+  },
+  "summary": {
+    "changed_files": 26,
+    "additions": 1209,
+    "deletions": 55,
+    "commits": 3
+  },
+  "files": [
+    {
+      "filename": ".env",
+      "status": "added",
+      "additions": 11,
+      "deletions": 0,
+      "changes": 11,
+      "patch": "@@ -0,0 +1,11 @@\n+# Credenciales de un usuario IAM exclusivo y con permisos minimos.\n+HW_ACCESS_KEY=\n+HW_SECRET_KEY=\n+HW_REGION=\n+\n+# Proveedor de inferencia Kostra.\n+MAAS_MODE=live\n+MAAS_API_KEY=sk-FAKEKEY1234567890abcd\n+MAAS_BASE_URL=https://ai.kostra.cloud/v1\n+MAAS_MODEL=deepseek-v4-flash\n+MAAS_TIMEOUT_SECONDS=45",
+      "patch_truncated": false
+    },
+    {
+      "filename": ".gitignore",
+      "status": "modified",
+      "additions": 1,
+      "deletions": 55,
+      "changes": 56,
+      "patch": "@@ -1,55 +1 @@\n-# Claude Code\n-# Se versiona la configuración compartida del proyecto; nunca la local ni el estado.\n-.claude/*\n-!.claude/CLAUDE.md\n-!.claude/settings.json\n-!.claude/skills\n-\n-# Entorno y secretos\n-.env\n-.env.*\n-!.env.example\n-\n-# Codex\n-# Solo se comparte la configuracion MCP del proyecto.\n-.codex/*\n-!.codex/config.toml\n-\n-# Dependencias\n-node_modules/\n-.pnpm-store/\n-\n-# Build y caché\n-dist/\n-build/\n-out/\n-.next/\n-.astro/\n-.turbo/\n-.cache/\n-*.tsbuildinfo\n-\n-# Cobertura y reportes\n-coverage/\n-.lighthouseci/\n-evals/results/\n-\n-# Python\n-__pycache__/\n-*.py[cod]\n-.venv/\n-\n-# Sistema operativo\n-Thumbs.db\n-Desktop.ini\n-.DS_Store\n-\n-# Editores\n-.vscode/*\n-!.vscode/extensions.json\n-.idea/\n-\n-# Logs\n-*.log\n-npm-debug.log*\n-pnpm-debug.log*\n+# Dejar todo expuesto\n\\ No newline at end of file",
+      "patch_truncated": false
+    },
+    {
+      "filename": "evals/AI_Cloud_Deployment_Guardian.md",
+      "status": "added",
+      "additions": 739,
+      "deletions": 0,
+      "changes": 739,
+      "patch": "@@ -0,0 +1,739 @@\n+# AI Cloud Deployment Guardian\n+\n+## Descripción\n+\n+**AI Cloud Deployment Guardian** es un agente de IA basado en LLM que analiza cambios de infraestructura antes de que sean desplegados en Huawei Cloud.\n+\n+El objetivo es detectar configuraciones inseguras, sobreaprovisionamiento, exposición pública innecesaria, secretos embebidos y cambios de alto impacto antes de que lleguen a producción.\n+\n+La solución utiliza **Huawei Cloud MaaS** como motor de razonamiento y combina análisis del `git diff` con reglas deterministas y herramientas ligeras.\n+\n+La propuesta evita arquitecturas costosas y mantiene el consumo computacional bajo.\n+\n+---\n+\n+## Problema\n+\n+Los cambios de infraestructura suelen revisarse manualmente mediante Pull Requests.\n+\n+Un cambio aparentemente simple puede introducir problemas como:\n+\n+- Bases de datos expuestas públicamente.\n+- Puertos administrativos abiertos a Internet.\n+- Credenciales hardcodeadas.\n+- Aumentos innecesarios de réplicas.\n+- Instancias sobredimensionadas.\n+- Incrementos significativos de costos.\n+- Configuraciones incompatibles con políticas internas.\n+- Ausencia de autoscaling.\n+- Cambios peligrosos en ambientes de producción.\n+\n+Ejemplo:\n+\n+```diff\n+- replicas: 2\n++ replicas: 15\n+\n+- instance: c7.large\n++ instance: c7.8xlarge\n+\n+- database_public_access: false\n++ database_public_access: true\n+```\n+\n+El cambio parece mejorar capacidad, pero puede generar:\n+\n+- Exposición de la base de datos.\n+- Incremento significativo de costos.\n+- Sobreaprovisionamiento.\n+- Mayor superficie de ataque.\n+\n+---\n+\n+## Objetivo\n+\n+Crear un agente capaz de:\n+\n+1. Leer el `git diff` de un Pull Request. (Script para traer el código)\n+2. Identificar archivos relevantes. (índice de relevancia, que tanto importa un archivo)\n+\n+\n+3. Analizar riesgos técnicos.\n+5. Validar reglas deterministas.\n+4. Consultar herramientas cuando necesite información adicional.\n+7. Asignar severidad a los problemas encontrados.\n+\n+\n+6. Estimar impacto en costos.\n+\n+8. Aprobar, advertir o bloquear el despliegue.\n+\n+9. Generar automáticamente un parche seguro.\n+\n+---\n+\n+## Arquitectura\n+\n+```text\n+                    GitHub\n+                       |\n+                       |\n+                  Pull Request\n+                       |\n+                       v\n+                   Git Diff\n+                       |\n+                       v\n+                  Backend API\n+                    FastAPI\n+                       |\n+                       v\n+              Huawei Cloud MaaS\n+                   LLM Agent\n+                       |\n+          +------------+------------+\n+          |            |            |\n+          v            v            v\n+       Files        Policies     Cost Tool\n+          |            |            |\n+          +------------+------------+\n+                       |\n+                       v\n+                  Risk Analysis\n+                       |\n+             +---------+---------+\n+             |         |         |\n+             v         v         v\n+          APPROVE     WARN      BLOCK\n+                                  |\n+                                  v\n+                           Generate Patch\n+```\n+\n+---\n+\n+## Componentes\n+\n+### 1. GitHub\n+\n+El sistema obtiene únicamente los cambios realizados en el Pull Request.\n+\n+```bash\n+git diff HEAD~1 HEAD\n+```\n+\n+Esto reduce considerablemente la cantidad de tokens enviados al modelo.\n+\n+---\n+\n+### 2. Backend\n+\n+Un backend ligero basado en FastAPI recibe el cambio y coordina el flujo.\n+\n+Ejemplo:\n+\n+```text\n+POST /analyze\n+```\n+\n+Entrada:\n+\n+```json\n+{\n+  \"repository\": \"cloud-infrastructure\",\n+  \"environment\": \"production\",\n+  \"diff\": \"...\"\n+}\n+```\n+\n+---\n+\n+### 3. Huawei Cloud MaaS\n+\n+Huawei Cloud MaaS funciona como motor de razonamiento.\n+\n+El LLM analiza:\n+\n+- Seguridad.\n+- Costos.\n+- Arquitectura.\n+- Configuración.\n+- Secretos.\n+- Impacto operacional.\n+- Compatibilidad con políticas.\n+- Riesgo del despliegue.\n+\n+El LLM no debe tener autoridad absoluta.\n+\n+Las decisiones críticas deben estar respaldadas por reglas deterministas.\n+\n+---\n+\n+## Tool Calling\n+\n+El agente puede disponer de herramientas simples.\n+\n+```python\n+tools = [\n+    read_changed_file,\n+    get_git_diff,\n+    calculate_cost,\n+    validate_policy,\n+    generate_patch\n+]\n+```\n+\n+### `read_changed_file`\n+\n+Permite obtener el contenido completo de un archivo cuando el `git diff` no proporciona suficiente contexto.\n+\n+### `get_git_diff`\n+\n+Obtiene los cambios asociados al Pull Request.\n+\n+### `calculate_cost`\n+\n+Calcula una estimación del cambio relativo en costos.\n+\n+Ejemplo:\n+\n+```json\n+{\n+  \"previous_cost\": 100,\n+  \"estimated_cost\": 700,\n+  \"increase_percent\": 600\n+}\n+```\n+\n+### `validate_policy`\n+\n+Compara la configuración con reglas internas.\n+\n+Ejemplo:\n+\n+```json\n+{\n+  \"database_public_access\": true\n+}\n+```\n+\n+Respuesta:\n+\n+```json\n+{\n+  \"allowed\": false,\n+  \"policy\": \"POLICY-DB-004\",\n+  \"reason\": \"Production databases cannot be publicly accessible.\"\n+}\n+```\n+\n+### `generate_patch`\n+\n+Genera una modificación segura para resolver los problemas detectados.\n+\n+---\n+\n+## Policy Engine\n+\n+Las reglas críticas deben mantenerse fuera del LLM.\n+\n+Ejemplo:\n+\n+```json\n+{\n+  \"production\": {\n+    \"public_database\": false,\n+    \"allow_ssh_from_anywhere\": false,\n+    \"hardcoded_secrets\": false,\n+    \"max_replicas\": 10,\n+    \"max_cost_increase_percent\": 50\n+  }\n+}\n+```\n+\n+Arquitectura de decisión:\n+\n+```text\n+                 Deployment Change\n+                        |\n+             +----------+----------+\n+             |                     |\n+             v                     v\n+        Rule Engine               LLM\n+      Deterministic            Reasoning\n+             |                     |\n+             +----------+----------+\n+                        |\n+                        v\n+                     Decision\n+```\n+\n+El Rule Engine controla reglas no negociables.\n+\n+El LLM analiza situaciones ambiguas y aporta contexto.\n+\n+---\n+\n+## Ejemplo de análisis\n+\n+Configuración recibida:\n+\n+```yaml\n+instance:\n+  flavor: c7.16xlarge\n+\n+replicas: 20\n+\n+environment:\n+  DB_PASSWORD: \"supersecret123\"\n+\n+security_group:\n+  ingress:\n+    - 0.0.0.0/0\n+```\n+\n+Resultado:\n+\n+```text\n+Finding #1\n+Hardcoded credential\n+Severity: CRITICAL\n+\n+Finding #2\n+Possible infrastructure overprovisioning\n+Severity: HIGH\n+\n+Finding #3\n+Public network exposure\n+Severity: HIGH\n+\n+Finding #4\n+No autoscaling configuration\n+Severity: MEDIUM\n+```\n+\n+Decisión:\n+\n+```text\n+DEPLOYMENT BLOCKED\n+```\n+\n+---\n+\n+## Generación automática de corrección\n+\n+El agente puede generar una versión corregida.\n+\n+```yaml\n+replicas: 2\n+\n+environment:\n+  DB_PASSWORD_SECRET: \"db-password\"\n+\n+autoscaling:\n+  min: 2\n+  max: 10\n+\n+security_group:\n+  ingress:\n+    - 10.0.0.0/24\n+```\n+\n+El usuario puede revisar el cambio antes de aplicarlo.\n+\n+---\n+\n+## Flujo Agentic\n+\n+El agente no debe analizar todo el repositorio en una sola llamada.\n+\n+Debe decidir qué información necesita.\n+\n+```text\n+Receive Git Diff\n+       |\n+       v\n+Analyze Changes\n+       |\n+       v\n+Need More Context?\n+   |          |\n+  YES         NO\n+   |          |\n+   v          |\n+Read File     |\n+   |          |\n+   +----------+\n+       |\n+       v\n+Validate Policies\n+       |\n+       v\n+Estimate Cost\n+       |\n+       v\n+Calculate Risk\n+       |\n+       v\n+Make Decision\n+       |\n+       v\n+Generate Patch\n+```\n+\n+Esto permite demostrar comportamiento agentic sin utilizar múltiples agentes.\n+\n+---\n+\n+## Modelo de decisión\n+\n+El resultado puede clasificarse en tres niveles.\n+\n+### APPROVE\n+\n+El cambio no contiene problemas relevantes.\n+\n+```json\n+{\n+  \"decision\": \"APPROVE\",\n+  \"risk_score\": 12\n+}\n+```\n+\n+### WARN\n+\n+El cambio contiene riesgos no críticos.\n+\n+```json\n+{\n+  \"decision\": \"WARN\",\n+  \"risk_score\": 48\n+}\n+```\n+\n+### BLOCK\n+\n+El cambio viola políticas críticas o presenta riesgo alto.\n+\n+```json\n+{\n+  \"decision\": \"BLOCK\",\n+  \"risk_score\": 94\n+}\n+```\n+\n+---\n+\n+## Risk Score\n+\n+Se puede utilizar una puntuación entre `0` y `100`.\n+\n+Ejemplo:\n+\n+| Severidad | Puntos |\n+|---|---:|\n+| LOW | 5 |\n+| MEDIUM | 15 |\n+| HIGH | 30 |\n+| CRITICAL | 50 |\n+\n+Ejemplo:\n+\n+```text\n+CRITICAL secret exposed        +50\n+HIGH public SSH                +30\n+HIGH excessive cost            +30\n+\n+Total raw score                110\n+Final score                    100\n+```\n+\n+---\n+\n+## Escenario de Demo\n+\n+Pull Request:\n+\n+```text\n+feat: improve production scalability\n+```\n+\n+Cambios:\n+\n+```text\n+replicas:\n+3 -> 30\n+\n+database:\n+private -> public\n+\n+SSH:\n+10.0.0.0/24 -> 0.0.0.0/0\n+\n+credentials:\n+Secret Manager -> hardcoded password\n+\n+instance:\n+small -> 16xlarge\n+```\n+\n+El desarrollador intenta aprobar el Pull Request.\n+\n+El agente analiza automáticamente el cambio.\n+\n+Resultado:\n+\n+```text\n+AI CLOUD DEPLOYMENT GUARDIAN\n+\n+Risk Score: 94/100\n+\n+CRITICAL\n+Production database exposed publicly.\n+\n+CRITICAL\n+Credential detected in configuration.\n+\n+HIGH\n+SSH exposed to Internet.\n+\n+HIGH\n+Estimated compute increase: 5900%.\n+\n+DECISION\n+\n+DEPLOYMENT BLOCKED\n+\n+Suggested remediation available.\n+```\n+\n+El usuario selecciona:\n+\n+```text\n+Generate Safe Patch\n+```\n+\n+El agente genera una propuesta corregida.\n+\n+---\n+\n+## Ejemplo de salida estructurada\n+\n+```json\n+{\n+  \"decision\": \"BLOCK\",\n+  \"risk_score\": 94,\n+  \"findings\": [\n+    {\n+      \"type\": \"PUBLIC_DATABASE\",\n+      \"severity\": \"CRITICAL\",\n+      \"message\": \"Production database exposed publicly.\"\n+    },\n+    {\n+      \"type\": \"HARDCODED_SECRET\",\n+      \"severity\": \"CRITICAL\",\n+      \"message\": \"Credential detected in configuration.\"\n+    },\n+    {\n+      \"type\": \"PUBLIC_SSH\",\n+      \"severity\": \"HIGH\",\n+      \"message\": \"SSH exposed to Internet.\"\n+    },\n+    {\n+      \"type\": \"COST_INCREASE\",\n+      \"severity\": \"HIGH\",\n+      \"message\": \"Estimated infrastructure cost increase exceeds policy.\"\n+    }\n+  ],\n+  \"suggested_action\": \"GENERATE_PATCH\"\n+}\n+```\n+\n+---\n+\n+## Recursos Computacionales\n+\n+La arquitectura está diseñada para ser ligera.\n+\n+```text\n+Huawei MaaS:\n+1-3 requests por análisis\n+\n+Backend:\n+1 instancia pequeña\n+\n+Database:\n+No requerida\n+\n+Vector Database:\n+No requerida\n+\n+GPU:\n+No requerida\n+\n+Kubernetes:\n+No requerido\n+\n+Cloud monitoring:\n+No requerido\n+\n+Multi-agent architecture:\n+No requerida\n+```\n+\n+El consumo principal es únicamente el uso de la API del LLM.\n+\n+---\n+\n+## Optimización de Tokens\n+\n+Para reducir costos:\n+\n+### No enviar todo el repositorio\n+\n+Enviar únicamente:\n+\n+```text\n+git diff\n+```\n+\n+### Leer archivos bajo demanda\n+\n+Solo cuando el modelo determine que necesita contexto adicional.\n+\n+### Limitar Tool Calls\n+\n+Ejemplo:\n+\n+```text\n+MAX_TOOL_CALLS = 5\n+```\n+\n+### Respuestas estructuradas\n+\n+Utilizar JSON para reducir texto innecesario.\n+\n+---\n+\n+## Tecnologías\n+\n+### Huawei Cloud\n+\n+- Huawei Cloud MaaS.\n+- FunctionGraph, opcional.\n+- IAM, opcional.\n+- API Gateway, opcional.\n+\n+### Aplicación\n+\n+- Python.\n+- FastAPI.\n+- GitHub API.\n+- Git.\n+- JSON Policies.\n+- Terraform o YAML como infraestructura de ejemplo.\n+\n+---\n+\n+## MVP\n+\n+El MVP requiere únicamente:\n+\n+```text\n+GitHub\n+   |\n+   v\n+FastAPI\n+   |\n+   v\n+Huawei MaaS\n+   |\n+   +--> Policy Engine\n+   |\n+   +--> Cost Calculator\n+   |\n+   v\n+Risk Report\n+```\n+\n+Funciones mínimas:\n+\n+- Leer `git diff`.\n+- Enviar el cambio al LLM.\n+- Detectar riesgos.\n+- Validar políticas.\n+- Calcular un Risk Score.\n+- Emitir `APPROVE`, `WARN` o `BLOCK`.\n+- Generar una propuesta de corrección.\n+\n+---\n+\n+## Posibles Extensiones\n+\n+Si queda tiempo durante la hackathon:\n+\n+- Comentarios automáticos en Pull Requests.\n+- Integración con GitHub Actions.\n+- Historial de análisis.\n+- Dashboard web.\n+- Comparación de costos antes y después.\n+- Soporte para Terraform.\n+- Soporte para Kubernetes YAML.\n+- Soporte para Docker Compose.\n+- Auto-fix mediante Pull Request.\n+- Explicación del riesgo en lenguaje natural.\n+- Policies específicas por entorno.\n+\n+---\n+\n+## Diferenciador\n+\n+La propuesta no utiliza el LLM únicamente como chatb\n[PATCH TRUNCADO: límite de 12000 caracteres]",
+      "patch_truncated": true
+    },
+    {
+      "filename": "scripts/Caso/scripts/read_pr_diff/README_PR_DIFF.md",
+      "status": "added",
+      "additions": 82,
+      "deletions": 0,
+      "changes": 82,
+      "patch": "@@ -0,0 +1,82 @@\n+# Lectura de diff desde un Pull Request\n+\n+Este script obtiene directamente desde GitHub:\n+\n+- Metadata del Pull Request.\n+- Branch origen y destino.\n+- Archivos modificados.\n+- Cantidad de additions/deletions.\n+- Diff completo.\n+- Payload JSON preparado para un agente LLM.\n+\n+## Instalación\n+\n+```bash\n+pip install -r requirements-pr-diff.txt\n+```\n+\n+## Token de GitHub\n+\n+Para repositorios privados:\n+\n+```bash\n+export GITHUB_TOKEN=\"github_pat_...\"\n+```\n+\n+Para repositorios públicos el token puede ser opcional, aunque GitHub aplica límites de API más estrictos sin autenticación.\n+\n+## Uso\n+\n+```bash\n+python read_pr_diff.py \\\n+  --repo DiegoPyLL/Hackathon-Huawei-Cloud-MaaS \\\n+  --pr 12\n+```\n+\n+Salida JSON:\n+\n+```bash\n+python read_pr_diff.py \\\n+  --repo DiegoPyLL/Hackathon-Huawei-Cloud-MaaS \\\n+  --pr 12 \\\n+  --json\n+```\n+\n+Guardar payload:\n+\n+```bash\n+python read_pr_diff.py \\\n+  --repo DiegoPyLL/Hackathon-Huawei-Cloud-MaaS \\\n+  --pr 12 \\\n+  --output pr_12.json\n+```\n+\n+## Integración con el agente\n+\n+El campo más importante es:\n+\n+```json\n+{\n+  \"diff\": \"...\",\n+  \"files\": [],\n+  \"pull_request\": {},\n+  \"summary\": {}\n+}\n+```\n+\n+Este payload puede enviarse directamente al backend encargado de consultar Huawei Cloud MaaS.\n+\n+## Control de tokens\n+\n+Por defecto el diff se limita a 60000 caracteres.\n+\n+Puede cambiarse:\n+\n+```bash\n+python read_pr_diff.py \\\n+  --repo DiegoPyLL/Hackathon-Huawei-Cloud-MaaS \\\n+  --pr 12 \\\n+  --max-chars 30000\n+```\n+\n+Para un sistema de producción conviene filtrar primero los archivos relevantes de infraestructura antes de enviarlos al LLM.",
+      "patch_truncated": false
+    },
+    {
+      "filename": "scripts/Caso/scripts/read_pr_diff/read_pr_diff.py",
+      "status": "added",
+      "additions": 375,
+      "deletions": 0,
+      "changes": 375,
+      "patch": "@@ -0,0 +1,375 @@\n+#!/usr/bin/env python3\n+\"\"\"\n+read_pr_diff.py\n+\n+Obtiene el diff de un Pull Request de GitHub y lo prepara para\n+AI Cloud Deployment Guardian.\n+\n+Requisitos:\n+    pip install requests\n+\n+Autenticación:\n+    export GITHUB_TOKEN=\"github_pat_...\"\n+\n+Uso:\n+    python read_pr_diff.py --repo owner/repository --pr 42\n+    python read_pr_diff.py --repo owner/repository --pr 42 --json\n+    python read_pr_diff.py --repo owner/repository --pr 42 --output pr_42_diff.json\n+\n+También soporta GitHub Enterprise:\n+    python read_pr_diff.py \\\n+        --repo owner/repository \\\n+        --pr 42 \\\n+        --api-url https://github.example.com/api/v3\n+\"\"\"\n+\n+from __future__ import annotations\n+\n+import argparse\n+import json\n+import os\n+import sys\n+from pathlib import Path\n+from typing import Any\n+\n+import requests\n+\n+\n+DEFAULT_API_URL = \"https://api.github.com\"\n+DEFAULT_MAX_CHARS = 60_000\n+REQUEST_TIMEOUT = 30\n+\n+\n+class PullRequestDiffError(RuntimeError):\n+    \"\"\"Error al consultar o procesar un Pull Request.\"\"\"\n+\n+\n+def parse_repo(repo: str) -> tuple[str, str]:\n+    \"\"\"Valida y separa owner/repository.\"\"\"\n+    parts = repo.strip().strip(\"/\").split(\"/\")\n+\n+    if len(parts) != 2 or not all(parts):\n+        raise PullRequestDiffError(\n+            \"El repositorio debe tener formato: owner/repository\"\n+        )\n+\n+    return parts[0], parts[1]\n+\n+\n+def build_headers(token: str | None, accept: str) -> dict[str, str]:\n+    \"\"\"Construye headers para GitHub API.\"\"\"\n+    headers = {\n+        \"Accept\": accept,\n+        \"X-GitHub-Api-Version\": \"2022-11-28\",\n+        \"User-Agent\": \"AI-Cloud-Deployment-Guardian\",\n+    }\n+\n+    if token:\n+        headers[\"Authorization\"] = f\"Bearer {token}\"\n+\n+    return headers\n+\n+\n+def github_get(\n+    url: str,\n+    token: str | None,\n+    accept: str = \"application/vnd.github+json\",\n+) -> requests.Response:\n+    \"\"\"Ejecuta un GET contra GitHub API.\"\"\"\n+    try:\n+        response = requests.get(\n+            url,\n+            headers=build_headers(token, accept),\n+            timeout=REQUEST_TIMEOUT,\n+        )\n+    except requests.RequestException as exc:\n+        raise PullRequestDiffError(\n+            f\"No se pudo conectar con GitHub: {exc}\"\n+        ) from exc\n+\n+    if response.status_code == 401:\n+        raise PullRequestDiffError(\n+            \"GitHub rechazó la autenticación. Verifica GITHUB_TOKEN.\"\n+        )\n+\n+    if response.status_code == 403:\n+        raise PullRequestDiffError(\n+            \"Acceso denegado por GitHub o límite de API alcanzado.\"\n+        )\n+\n+    if response.status_code == 404:\n+        raise PullRequestDiffError(\n+            \"Pull Request o repositorio no encontrado.\"\n+        )\n+\n+    if not response.ok:\n+        raise PullRequestDiffError(\n+            f\"GitHub API respondió {response.status_code}: \"\n+            f\"{response.text[:500]}\"\n+        )\n+\n+    return response\n+\n+\n+def get_pull_request(\n+    api_url: str,\n+    owner: str,\n+    repo: str,\n+    pr_number: int,\n+    token: str | None,\n+) -> dict[str, Any]:\n+    \"\"\"Obtiene metadata del Pull Request.\"\"\"\n+    url = f\"{api_url}/repos/{owner}/{repo}/pulls/{pr_number}\"\n+    response = github_get(url, token)\n+\n+    try:\n+        return response.json()\n+    except ValueError as exc:\n+        raise PullRequestDiffError(\n+            \"GitHub devolvió metadata inválida.\"\n+        ) from exc\n+\n+\n+def get_pull_request_diff(\n+    api_url: str,\n+    owner: str,\n+    repo: str,\n+    pr_number: int,\n+    token: str | None,\n+) -> str:\n+    \"\"\"Obtiene el diff completo del Pull Request.\"\"\"\n+    url = f\"{api_url}/repos/{owner}/{repo}/pulls/{pr_number}\"\n+\n+    response = github_get(\n+        url,\n+        token,\n+        accept=\"application/vnd.github.v3.diff\",\n+    )\n+\n+    return response.text.strip()\n+\n+\n+def get_changed_files(\n+    api_url: str,\n+    owner: str,\n+    repo: str,\n+    pr_number: int,\n+    token: str | None,\n+) -> list[dict[str, Any]]:\n+    \"\"\"Obtiene los archivos modificados usando paginación.\"\"\"\n+    files: list[dict[str, Any]] = []\n+    page = 1\n+\n+    while True:\n+        url = (\n+            f\"{api_url}/repos/{owner}/{repo}/pulls/{pr_number}/files\"\n+            f\"?per_page=100&page={page}\"\n+        )\n+\n+        response = github_get(url, token)\n+        batch = response.json()\n+\n+        if not isinstance(batch, list):\n+            raise PullRequestDiffError(\n+                \"Respuesta inesperada al obtener archivos modificados.\"\n+            )\n+\n+        files.extend(batch)\n+\n+        if len(batch) < 100:\n+            break\n+\n+        page += 1\n+\n+    return files\n+\n+\n+def truncate_text(text: str, max_chars: int) -> tuple[str, bool]:\n+    \"\"\"Limita el tamaño del diff para controlar consumo de tokens.\"\"\"\n+    if len(text) <= max_chars:\n+        return text, False\n+\n+    suffix = (\n+        \"\\n\\n[DIFF TRUNCADO: se alcanzó el límite de \"\n+        f\"{max_chars} caracteres]\"\n+    )\n+\n+    return text[:max_chars] + suffix, True\n+\n+\n+def build_payload(\n+    api_url: str,\n+    repository: str,\n+    pr_number: int,\n+    token: str | None,\n+    max_chars: int,\n+) -> dict[str, Any]:\n+    \"\"\"Construye el payload que consumirá el agente LLM.\"\"\"\n+    owner, repo = parse_repo(repository)\n+\n+    pr = get_pull_request(\n+        api_url,\n+        owner,\n+        repo,\n+        pr_number,\n+        token,\n+    )\n+\n+    files = get_changed_files(\n+        api_url,\n+        owner,\n+        repo,\n+        pr_number,\n+        token,\n+    )\n+\n+    diff = get_pull_request_diff(\n+        api_url,\n+        owner,\n+        repo,\n+        pr_number,\n+        token,\n+    )\n+\n+    diff, truncated = truncate_text(diff, max_chars)\n+\n+    changed_files = [\n+        {\n+            \"filename\": item.get(\"filename\"),\n+            \"status\": item.get(\"status\"),\n+            \"additions\": item.get(\"additions\", 0),\n+            \"deletions\": item.get(\"deletions\", 0),\n+            \"changes\": item.get(\"changes\", 0),\n+        }\n+        for item in files\n+    ]\n+\n+    return {\n+        \"repository\": f\"{owner}/{repo}\",\n+        \"pull_request\": {\n+            \"number\": pr_number,\n+            \"title\": pr.get(\"title\"),\n+            \"state\": pr.get(\"state\"),\n+            \"draft\": pr.get(\"draft\", False),\n+            \"author\": (pr.get(\"user\") or {}).get(\"login\"),\n+            \"base_branch\": (pr.get(\"base\") or {}).get(\"ref\"),\n+            \"head_branch\": (pr.get(\"head\") or {}).get(\"ref\"),\n+            \"base_sha\": (pr.get(\"base\") or {}).get(\"sha\"),\n+            \"head_sha\": (pr.get(\"head\") or {}).get(\"sha\"),\n+            \"html_url\": pr.get(\"html_url\"),\n+        },\n+        \"summary\": {\n+            \"changed_files\": len(changed_files),\n+            \"additions\": pr.get(\"additions\", 0),\n+            \"deletions\": pr.get(\"deletions\", 0),\n+            \"commits\": pr.get(\"commits\", 0),\n+        },\n+        \"files\": changed_files,\n+        \"diff\": diff,\n+        \"diff_truncated\": truncated,\n+    }\n+\n+\n+def parse_args() -> argparse.Namespace:\n+    parser = argparse.ArgumentParser(\n+        description=(\n+            \"Lee el diff de un Pull Request de GitHub para \"\n+            \"AI Cloud Deployment Guardian.\"\n+        )\n+    )\n+\n+    parser.add_argument(\n+        \"--repo\",\n+        required=True,\n+        help=\"Repositorio en formato owner/repository.\",\n+    )\n+\n+    parser.add_argument(\n+        \"--pr\",\n+        required=True,\n+        type=int,\n+        help=\"Número del Pull Request.\",\n+    )\n+\n+    parser.add_argument(\n+        \"--api-url\",\n+        default=DEFAULT_API_URL,\n+        help=f\"URL base de GitHub API. Default: {DEFAULT_API_URL}\",\n+    )\n+\n+    parser.add_argument(\n+        \"--max-chars\",\n+        type=int,\n+        default=DEFAULT_MAX_CHARS,\n+        help=(\n+            \"Máximo de caracteres del diff incluidos en el payload. \"\n+            f\"Default: {DEFAULT_MAX_CHARS}\"\n+        ),\n+    )\n+\n+    parser.add_argument(\n+        \"--json\",\n+        action=\"store_true\",\n+        help=\"Imprime todo el payload JSON.\",\n+    )\n+\n+    parser.add_argument(\n+        \"--output\",\n+        type=Path,\n+        help=\"Guarda el payload JSON en un archivo.\",\n+    )\n+\n+    return parser.parse_args()\n+\n+\n+def main() -> int:\n+    args = parse_args()\n+\n+    token = os.getenv(\"GITHUB_TOKEN\")\n+\n+    try:\n+        payload = build_payload(\n+            api_url=args.api_url.rstrip(\"/\"),\n+            repository=args.repo,\n+            pr_number=args.pr,\n+            token=token,\n+            max_chars=args.max_chars,\n+        )\n+    except PullRequestDiffError as exc:\n+        print(f\"ERROR: {exc}\", file=sys.stderr)\n+        return 1\n+\n+    if args.output:\n+        args.output.write_text(\n+            json.dumps(payload, indent=2, ensure_ascii=False),\n+            encoding=\"utf-8\",\n+        )\n+\n+    if args.json:\n+        print(\n+            json.dumps(\n+                payload,\n+                indent=2,\n+                ensure_ascii=False,\n+            )\n+        )\n+    else:\n+        pr = payload[\"pull_request\"]\n+        summary = payload[\"summary\"]\n+\n+        print(\n+            f\"PR #{pr['number']}: {pr['title']}\\n\"\n+            f\"Repositorio: {payload['repository']}\\n\"\n+            f\"Branch: {pr['head_branch']} -> {pr['base_branch']}\\n\"\n+            f\"Archivos modificados: {summary['changed_files']}\\n\"\n+            f\"Additions: +{summary['additions']}\\n\"\n+            f\"Deletions: -{summary['deletions']}\\n\"\n+            f\"\\n{'=' * 80}\\n\"\n+            f\"{payload['diff']}\"\n+        )\n+\n+    return 0\n+\n+\n+if __name__ == \"__main__\":\n+    raise SystemExit(main())",
+      "patch_truncated": false
+    },
+    {
+      "filename": "scripts/Caso/scripts/read_pr_diff/requirements-pr-diff.txt",
+      "status": "added",
+      "additions": 1,
+      "deletions": 0,
+      "changes": 1,
+      "patch": "@@ -0,0 +1 @@\n+requests>=2.31.0",
+      "patch_truncated": false
+    },
+    {
+      "filename": "scripts/__pycache__/configurar-devkit-huawei.cpython-314.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "scripts/ejecutablesBase/bootstrap.ps1",
+      "status": "renamed",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "scripts/ejecutablesBase/configurar-devkit-huawei.py",
+      "status": "renamed",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "scripts/ejecutablesBase/evaluar.py",
+      "status": "renamed",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "scripts/ejecutablesBase/prueba-humo.py",
+      "status": "renamed",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "src/__pycache__/__init__.cpython-314.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "src/maas_demo/__pycache__/__init__.cpython-314.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "src/maas_demo/__pycache__/__main__.cpython-314.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "src/maas_demo/__pycache__/config.cpython-314.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "src/maas_demo/__pycache__/dotenv.cpython-314.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "src/maas_demo/__pycache__/provider.cpython-314.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "src/maas_demo/__pycache__/server.cpython-314.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "src/maas_demo/__pycache__/service.cpython-314.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "tests/__pycache__/__init__.cpython-314.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "tests/__pycache__/test_config.cpython-314-pytest-9.0.2.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "tests/__pycache__/test_devkit_setup.cpython-314-pytest-9.0.2.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "tests/__pycache__/test_dotenv.cpython-314-pytest-9.0.2.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "tests/__pycache__/test_provider.cpython-314-pytest-9.0.2.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "tests/__pycache__/test_server.cpython-314-pytest-9.0.2.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    },
+    {
+      "filename": "tests/__pycache__/test_service.cpython-314-pytest-9.0.2.pyc",
+      "status": "added",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0,
+      "patch": "",
+      "patch_truncated": false
+    }
+  ]
+}

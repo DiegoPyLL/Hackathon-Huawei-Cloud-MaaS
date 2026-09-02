@@ -49,7 +49,7 @@ la primera vez. Nunca se versionan `.env` ni credenciales reales.
 ## Ejecutar el panel
 
 ```bash
-python3 -m src.maas_demo
+PYTHONPATH=src python3 -m maas_demo
 ```
 
 Abrir <http://127.0.0.1:8080>.
@@ -59,7 +59,7 @@ Abrir <http://127.0.0.1:8080>.
 No requiere dependencias Python ni credenciales:
 
 ```bash
-MAAS_MODE=mock python3 -m src.maas_demo
+MAAS_MODE=mock PYTHONPATH=src python3 -m maas_demo
 ```
 
 Abrir <http://127.0.0.1:8080>. La interfaz mostrará claramente `MOCK`.
@@ -69,7 +69,7 @@ Para ejecutar contra Huawei MaaS:
 ```bash
 cp .env.example .env
 # Completar MAAS_API_KEY y cambiar MAAS_MODE=live
-python3 -m src.maas_demo
+PYTHONPATH=src python3 -m maas_demo
 ```
 
 La aplicación nunca cambia silenciosamente de `live` a `mock`. Si Huawei MaaS
@@ -113,7 +113,8 @@ modelo y latencia.
 ## Estructura
 
 ```text
-src/maas_demo/      Aplicación, proveedor MaaS y frontend
+src/maas_demo/      API FastAPI, proveedor MaaS y frontend
+src/guardian/       Análisis de Pull Requests: ranking, reglas, coste y agente
 tests/              Contratos, streaming y API HTTP
 evals/              Casos repetibles de evaluación
 scripts/            Instalación, evaluación y smoke test

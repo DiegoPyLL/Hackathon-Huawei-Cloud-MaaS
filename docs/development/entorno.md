@@ -65,7 +65,7 @@ claude mcp list
 El modo local no necesita instalar paquetes:
 
 ```bash
-MAAS_MODE=mock python3 -m src.maas_demo
+MAAS_MODE=mock PYTHONPATH=src python3 -m maas_demo
 ```
 
 Para usar Huawei MaaS, copiar `.env.example` a `.env`, establecer

@@ -1,0 +1,70 @@
+{
+  "severity_points": {
+    "LOW": 5,
+    "MEDIUM": 15,
+    "HIGH": 30,
+    "CRITICAL": 50
+  },
+  "decision_bands": {
+    "BLOCK": 70,
+    "WARN": 30
+  },
+  "environments": {
+    "production": {
+      "public_database": false,
+      "allow_ssh_from_anywhere": false,
+      "hardcoded_secrets": false,
+      "max_replicas": 10,
+      "max_cost_increase_percent": 50
+    },
+    "staging": {
+      "public_database": false,
+      "allow_ssh_from_anywhere": false,
+      "hardcoded_secrets": false,
+      "max_replicas": 20,
+      "max_cost_increase_percent": 200
+    },
+    "development": {
+      "public_database": true,
+      "allow_ssh_from_anywhere": true,
+      "hardcoded_secrets": false,
+      "max_replicas": 50,
+      "max_cost_increase_percent": 1000
+    }
+  },
+  "rules": [
+    {
+      "id": "POLICY-DB-004",
+      "type": "PUBLIC_DATABASE",
+      "setting": "public_database",
+      "severity": "CRITICAL",
+      "pattern": "(?:database_public_access|publicly_accessible|public_access)\\s*[:=]\\s*[\"']?(?:true|yes|1)\\b",
+      "message": "Base de datos de producción expuesta públicamente."
+    },
+    {
+      "id": "POLICY-NET-001",
+      "type": "PUBLIC_SSH",
+      "setting": "allow_ssh_from_anywhere",
+      "severity": "HIGH",
+      "pattern": "0\\.0\\.0\\.0/0",
+      "message": "Rango de red abierto a Internet (0.0.0.0/0)."
+    },
+    {
+      "id": "POLICY-SEC-002",
+      "type": "HARDCODED_SECRET",
+      "setting": "hardcoded_secrets",
+      "severity": "CRITICAL",
+      "pattern": "(?:password|passwd|secret|api[_-]?key|access[_-]?key|token)[\"']?\\s*[:=]\\s*[\"']?(?=[^\"'\\s]*[0-9A-Z])[^\"'\\s$\\{][^\"'\\s]{7,}",
+      "ignore": "\\.\\.\\.|xxx+|<[^>]+>|your[_-]|example|changeme|placeholder|redacted|\\$\\{|getenv|environ|process\\.env",
+      "message": "Credencial detectada en la configuración."
+    },
+    {
+      "id": "POLICY-CAP-003",
+      "type": "EXCESSIVE_REPLICAS",
+      "setting": "max_replicas",
+      "severity": "HIGH",
+      "numeric_pattern": "replicas\\s*[:=]\\s*(\\d+)",
+      "message": "El número de réplicas supera el máximo permitido."
+    }
+  ]
+}
