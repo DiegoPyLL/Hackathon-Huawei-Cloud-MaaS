@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 
 
-DEFAULT_BASE_URL = "https://api-ap-southeast-1.modelarts-maas.com/v2"
+DEFAULT_BASE_URL = "https://ai.kostra.cloud/v1"
 
 
 class ConfigError(ValueError):
