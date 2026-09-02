@@ -54,7 +54,7 @@ El cambio parece mejorar capacidad, pero puede generar:
 
 Crear un agente capaz de:
 
-1. Leer el `git diff` de un Pull Request.
+1. Leer el `git diff` de un Pull Request. (Script para traer el código)
 2. Identificar archivos relevantes.
 3. Analizar riesgos técnicos.
 4. Consultar herramientas cuando necesite información adicional.
