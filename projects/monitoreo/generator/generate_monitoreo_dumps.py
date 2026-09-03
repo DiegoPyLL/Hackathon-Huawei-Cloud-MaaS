@@ -71,6 +71,11 @@ ACCIONES = {
 ESPECIALISTAS = {"dba", "sysadmin", "secops"}
 
 # --- Vocabulario de Nortia Retail (derivado del repo) -------------------------
+# SERVICIOS es superficie publica: `projects/bus-incidentes/bus.py` lo importa
+# junto a ESCENARIOS, RUTEO_DEFECTO e Ids. No renombrar ni eliminar sin avisar.
+SERVICIOS = ["checkout", "pagos", "auth-service", "api-gateway", "notificaciones",
+             "reportes", "bd-clientes", "batch-facturacion", "login-web",
+             "app-movil", "cache-redis", "cola-mensajes", "buscar", "pedidos"]
 USUARIOS = ["ana.soto", "j.paredes", "m.rivas", "c.tapia", "r.munoz", "p.leiva",
             "l.vera", "d.fuentes", "s.arce", "n.bravo"]
 IP_ATAQUE = "203.0.113.47"
@@ -786,6 +791,11 @@ RX_IDS = {
 }
 
 
+# Nombres que otros proyectos del repo importan de este modulo. Cambiar o quitar
+# uno rompe a quien lo consume, asi que --autotest lo comprueba explicitamente.
+API_PUBLICA = ("ESCENARIOS", "RUTEO_DEFECTO", "SERVICIOS", "Ids", "RUIDOS")
+
+
 def validar(dumps: List[dict], exigir_cobertura: bool = True) -> List[str]:
     """Devuelve la lista de incumplimientos del contrato. Vacia = todo correcto.
 
@@ -858,6 +868,54 @@ def render_md(dumps: List[dict]) -> str:
     return "\n".join(out)
 
 
+def cmd_autotest() -> int:
+    """Comprueba lo que otros dan por hecho de este modulo. Devuelve 0 si todo pasa."""
+    fallos = []
+
+    faltan = [n for n in API_PUBLICA if n not in globals()]
+    if faltan:
+        fallos.append(f"faltan nombres que otros proyectos importan: {faltan}")
+
+    # cada escenario debe construirse y declarar un groundtruth coherente
+    rng = random.Random(0)
+    for nombre, fn in ESCENARIOS.items():
+        try:
+            e = fn(Ids(random.Random(0)), rng)
+        except Exception as exc:                                    # noqa: BLE001
+            fallos.append(f"escenario '{nombre}' no se construye: {exc!r}")
+            continue
+        if e["tipo"] not in TIPOS:
+            fallos.append(f"escenario '{nombre}': tipo '{e['tipo']}' fuera de los 8")
+        if RUTEO_DEFECTO.get(e["tipo"]) not in e["especialistas"]:
+            fallos.append(f"escenario '{nombre}': sin el especialista por defecto")
+        if e.get("accion") and e["accion"]["action_id"] not in ACCIONES:
+            fallos.append(f"escenario '{nombre}': accion fuera del catalogo cerrado")
+        if not e.get("lines"):
+            fallos.append(f"escenario '{nombre}': no emite ninguna linea")
+
+    for nombre, fn in RUIDOS.items():
+        r = fn(Ids(random.Random(0)), rng)
+        if not r.get("descartado"):
+            fallos.append(f"ruido '{nombre}': sin el dato que lo descarta")
+
+    # un dataset completo debe cumplir el contrato
+    specs = elegir_volcados(random.Random(7), 40)
+    dumps = [construir_volcado(random.Random(7 + i), i, s["segmento"], s["escenarios"],
+                               s["ruidos"], hostil=s.get("hostil", False),
+                               presupuesto=s.get("presupuesto", False))
+             for i, s in enumerate(specs, start=1)]
+    fallos.extend(validar(dumps))
+
+    if fallos:
+        print(f"AUTOTEST: {len(fallos)} fallo(s)")
+        for f in fallos:
+            print(f"  - {f}")
+        return 1
+    print(f"AUTOTEST OK · {len(ESCENARIOS)} escenarios · {len(RUIDOS)} ruidos · "
+          f"{len(dumps)} volcados · API publica {', '.join(API_PUBLICA)}")
+    return 0
+
+
 def cmd_list() -> None:
     # tipo de cada escenario para la tabla
     print(f"{'ESCENARIO':<32} {'TIPO':<22} ESPECIALISTAS")
@@ -883,11 +941,15 @@ def main(argv=None) -> None:
                     help="lista de ids separada por comas: un volcado camino-feliz por cada uno")
     ap.add_argument("--pretty", action="store_true", help="jsonl indentado (una entrada por bloque)")
     ap.add_argument("--list-escenarios", action="store_true")
+    ap.add_argument("--autotest", action="store_true",
+                    help="comprueba escenarios, contrato y API publica; no escribe nada")
     args = ap.parse_args(argv)
 
     if args.list_escenarios:
         cmd_list()
         return
+    if args.autotest:
+        sys.exit(cmd_autotest())
 
     rng = random.Random(args.seed)
 

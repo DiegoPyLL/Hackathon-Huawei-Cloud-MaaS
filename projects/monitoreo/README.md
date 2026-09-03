@@ -87,6 +87,28 @@ monitoreo/
     └── ejemplos.md             render legible (opcional)
 ```
 
+## Superficie pública (no romper)
+
+`projects/bus-incidentes/bus.py` **importa este módulo** para no duplicar la
+taxonomía: reutiliza los 16 escenarios canónicos como fuente de los incidentes
+que reparte a todos los canales.
+
+```python
+from generate_monitoreo_dumps import ESCENARIOS, RUTEO_DEFECTO, SERVICIOS, Ids
+```
+
+Esos nombres —más `RUIDOS`— son API pública: renombrarlos o eliminarlos rompe el
+bus. Están listados en `API_PUBLICA` y `--autotest` lo verifica.
+
+```bash
+# antes de commitear cualquier cambio al generador
+python projects/monitoreo/generator/generate_monitoreo_dumps.py --autotest
+```
+
+Comprueba que los nombres públicos siguen ahí, que los 16 escenarios se
+construyen y declaran groundtruth coherente, que cada ruido trae el dato que lo
+descarta, y que un dataset completo cumple el contrato. No escribe nada.
+
 ## Auto-validación
 
 Antes de escribir nada a disco, el generador comprueba su propia salida contra el
