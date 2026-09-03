@@ -32,7 +32,13 @@ import argparse
 import json
 import random
 import sys
+from pathlib import Path
 from typing import Callable, Dict, List, Optional
+
+# Rutas por defecto relativas al script, no al directorio desde el que se invoca:
+# el generador debe funcionar igual desde generator/, desde monitoreo/ o desde la
+# raiz del repo.
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 EMPRESA = "Nortia Retail"
 
@@ -748,6 +754,10 @@ def elegir_volcados(rng: random.Random, n: int) -> List[dict]:
     """1 volcado camino-feliz por escenario (cobertura total) + el resto repartido
     por PATRON_RICOS."""
     pool = list(ESCENARIOS.keys())
+    if n < len(pool):
+        sys.stderr.write(
+            f"[aviso] --n {n} es menor que los {len(pool)} escenarios del catalogo; se generan "
+            f"{len(pool)} volcados para no dejar ningun tipo sin cubrir.\n")
     specs = [_spec_para("camino-feliz", rng, pool) for _ in pool]
     # forzar que cada escenario aparezca una vez en su propio camino-feliz
     for spec, key in zip(specs, pool):
@@ -798,9 +808,10 @@ def main(argv=None) -> None:
         description=f"Genera volcados sinteticos del canal monitoreo de {EMPRESA} con groundtruth.")
     ap.add_argument("--n", type=int, default=40, help="numero de volcados (default 40)")
     ap.add_argument("--seed", type=int, default=7, help="semilla RNG (default 7)")
-    ap.add_argument("--out", default="../data/monitoreo_dumps.jsonl",
-                    help="ruta del .jsonl de salida")
-    ap.add_argument("--md-out", default="", help="ruta opcional de un .md legible")
+    ap.add_argument("--out", type=Path, default=DATA_DIR / "monitoreo_dumps.jsonl",
+                    help="ruta del .jsonl de salida (default: data/ del proyecto)")
+    ap.add_argument("--md-out", type=Path, default=None,
+                    help="ruta opcional de un .md legible")
     ap.add_argument("--solo-escenario", default="",
                     help="lista de ids separada por comas: un volcado camino-feliz por cada uno")
     ap.add_argument("--pretty", action="store_true", help="jsonl indentado (una entrada por bloque)")
@@ -828,6 +839,7 @@ def main(argv=None) -> None:
             rng, i, spec["segmento"], spec["escenarios"], spec["ruidos"],
             hostil=spec.get("hostil", False), presupuesto=spec.get("presupuesto", False)))
 
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         for d in dumps:
             if args.pretty:
@@ -836,6 +848,7 @@ def main(argv=None) -> None:
                 f.write(json.dumps(d, ensure_ascii=False) + "\n")
 
     if args.md_out:
+        args.md_out.parent.mkdir(parents=True, exist_ok=True)
         with open(args.md_out, "w", encoding="utf-8") as f:
             f.write(render_md(dumps))
 

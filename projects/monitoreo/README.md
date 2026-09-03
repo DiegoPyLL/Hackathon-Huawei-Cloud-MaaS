@@ -37,30 +37,38 @@ Orquestador (triage + clasificación + separación de ruido) sin etiquetado manu
 
 ## Requisitos
 
-Python 3.9+. Sin dependencias externas.
+Python 3.9+. Sin dependencias externas. Funciona igual en Windows, macOS y Linux.
 
 ## Uso
 
+Se puede ejecutar **desde cualquier directorio**: las rutas por defecto se
+resuelven respecto al script, no respecto a donde lo lances. Los ejemplos usan la
+raíz del repo.
+
 ```bash
-cd generator
-
 # catálogo de escenarios (16, dos por cada tipo canónico)
-python generate_monitoreo_dumps.py --list-escenarios
+python projects/monitoreo/generator/generate_monitoreo_dumps.py --list-escenarios
 
-# dataset por defecto: 40 volcados, reproducible
-python generate_monitoreo_dumps.py --seed 7 \
-  --out ../data/monitoreo_dumps.jsonl \
-  --md-out ../data/ejemplos.md
+# dataset por defecto: 40 volcados en projects/monitoreo/data/, reproducible
+python projects/monitoreo/generator/generate_monitoreo_dumps.py --seed 7
+
+# además, un .md legible con cada volcado y su `esperado`
+python projects/monitoreo/generator/generate_monitoreo_dumps.py \
+  --md-out projects/monitoreo/data/ejemplos.md
 
 # un volcado camino-feliz por cada escenario dado
-python generate_monitoreo_dumps.py --solo-escenario credential_stuffing_horizontal,disco_motor_datos
+python projects/monitoreo/generator/generate_monitoreo_dumps.py \
+  --solo-escenario credential_stuffing_horizontal,disco_motor_datos
 ```
+
+En Windows, `python` suele ser el ejecutable correcto; en Linux/macOS puede que
+necesites `python3`.
 
 | Flag | Default | Descripción |
 | --- | --- | --- |
-| `--n` | 40 | nº de volcados (16 de cobertura + resto repartido por segmentos) |
+| `--n` | 40 | nº de volcados. El mínimo real es 16 (uno por escenario, para no dejar ningún tipo sin cubrir); el resto se reparte por segmentos |
 | `--seed` | 7 | semilla RNG; misma semilla ⇒ mismo dataset |
-| `--out` | `../data/monitoreo_dumps.jsonl` | salida JSONL |
+| `--out` | `data/monitoreo_dumps.jsonl` del proyecto | salida JSONL. Una ruta relativa se resuelve desde tu directorio actual |
 | `--md-out` | — | además, un `.md` legible con cada volcado y su `esperado` |
 | `--solo-escenario a,b` | — | un volcado camino-feliz por cada id |
 | `--pretty` | — | JSONL indentado |
