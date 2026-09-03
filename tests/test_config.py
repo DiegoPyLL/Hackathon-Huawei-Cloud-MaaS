@@ -11,7 +11,7 @@ class ConfigTests(unittest.TestCase):
             config = Config.from_env()
 
         self.assertEqual(config.mode, "mock")
-        self.assertEqual(config.model, "deepseek-v4-pro")
+        self.assertEqual(config.model, "glm-5.2")
         self.assertNotIn("chat/completions", config.base_url)
 
     def test_live_mode_requires_api_key(self) -> None:

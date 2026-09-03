@@ -1,0 +1,13 @@
+{
+  "users": [
+    {"username": "admin", "password": "Adm1n#2026!", "role": "admin"},
+    {"username": "jperez", "password": "hunter2", "role": "user"},
+    {"username": "mcastro", "password": "chile2026", "role": "user"},
+    {"username": "svc-backup", "password": "backup-service-key", "role": "service"}
+  ],
+  "notes": [
+    {"user_id": 1, "body": "Recordatorio: rotar la clave de admin trimestralmente."},
+    {"user_id": 2, "body": "Pendiente: subir el informe de gastos de marzo."},
+    {"user_id": 3, "body": "Ticket #451 resuelto, cliente conforme."}
+  ]
+}

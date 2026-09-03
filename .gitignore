@@ -8,6 +8,10 @@
 # Entorno y secretos
 .env
 .env.*
+
+# Rango de refuerzo: transcripts y estado son spoilers del ataque a ciegas
+reinforcement-range/transcript-*.json
+reinforcement-range/state*.json
 !.env.example
 
 # Codex

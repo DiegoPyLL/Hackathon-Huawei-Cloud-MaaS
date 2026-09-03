@@ -124,14 +124,35 @@ modelo y latencia.
 ## Estructura
 
 ```text
-src/maas_demo/      Aplicación, proveedor MaaS y frontend
-tests/              Contratos, streaming y API HTTP
-evals/              Casos repetibles de evaluación
-scripts/            Instalación, evaluación y smoke test
-docs/product/       Visión, alcance y guion de demo
-docs/architecture/  Stack y decisiones técnicas
-docs/operations/    Despliegue y comprobación live
+src/maas_demo/           Aplicación, proveedor MaaS y frontend
+tests/                   Contratos, streaming y API HTTP
+evals/                   Casos repetibles de evaluación
+scripts/                 Instalación, evaluación y smoke test
+reinforcement-range/     Rango de pruebas aislado: contenedor vulnerable +
+                         agente de hardening con shell real (ver ADR 0002)
+docs/product/            Visión, alcance y guion de demo
+docs/architecture/       Stack y decisiones técnicas
+docs/operations/         Despliegue y comprobación live
 ```
+
+## Rango de refuerzo (`reinforcement-range/`)
+
+Subsistema separado del Incident Response Agent — no comparte su invariante
+de solo-lectura. Un contenedor Docker aislado (sin salida a internet) corre
+una app deliberadamente vulnerable; un agente con `run_shell` y
+`restart_target` reales intenta reforzarla, y el equipo la ataca a ciegas
+para validar si aguanta. Detalle completo de arquitectura y decisiones en
+[`docs/architecture/decisions/0002-rango-de-refuerzo-con-ejecucion-real.md`](docs/architecture/decisions/0002-rango-de-refuerzo-con-ejecucion-real.md).
+
+```bash
+cd reinforcement-range
+bash reset.sh          # levanta el objetivo desde cero
+bash run-harden.sh      # deja al modelo reforzarlo con shell real
+python3 watch-and-defend.py  # el Incident Response Agent analiza el tráfico en vivo
+```
+
+Los `transcript-*.json` y `state*.json` no se versionan a propósito — son
+spoilers del ataque a ciegas del equipo.
 
 ## Estado
 
