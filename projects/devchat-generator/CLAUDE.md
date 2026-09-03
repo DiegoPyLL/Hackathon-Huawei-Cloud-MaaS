@@ -24,13 +24,13 @@ dueño sugerido y referencia a incidentes previos similares (RAG).
 
 ## Estado actual
 - [x] Generador sintético de dev chat (`channels/devchat/generator/`)
-- [ ] Generador sintético de email
-- [ ] Generador sintético de monitoring alert
-- [ ] Esquema canónico de incidente (formato de salida del clasificador)
-- [ ] Loop del agente con tool calling sobre MaaS
-- [ ] Lógica de correlación/deduplicación cross-canal
-- [ ] Demo UI mínima
-- [ ] Guion de pitch
+- [x] Generador sintético de email (`channels/email/generator/`)
+- [x] Generador sintético de monitoring alert (`channels/monitoring/generator/`)
+- [x] Esquema canónico de incidente (`agent/schema.py`)
+- [x] Loop del agente con tool calling sobre MaaS (`agent/loop.py`, `agent/tools.py`)
+- [x] Lógica de correlación/deduplicación cross-canal (`agent/correlate.py`)
+- [x] Demo UI mínima (`demo/server.py` + `demo/static/`)
+- [x] Guion de pitch (`docs/pitch.md`)
 
 Ver `docs/taxonomia_incidentes.md` para la clasificación y `channels/*/NOTES.md`
 para las particularidades de cada canal.

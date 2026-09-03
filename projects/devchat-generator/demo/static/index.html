@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Incident Triage Agent — Demo</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --text-dim: #71717a;
+    --accent: #6366f1;
+    --green: #22c55e;
+    --red: #ef4444;
+    --orange: #f97316;
+    --yellow: #eab308;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; }
+  header .actions { display: flex; gap: 12px; align-items: center; }
+  .btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: var(--border); }
+  #progress-bar {
+    width: 200px;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    display: none;
+  }
+  #progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.3s;
+  }
+  #progress-text { font-size: 12px; color: var(--text-dim); }
+  main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+  #sidebar {
+    width: 280px;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 16px;
+  }
+  #sidebar h2 { font-size: 14px; color: var(--text-dim); margin-bottom: 12px; text-transform: uppercase; }
+  .stat-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  .stat-card .label { font-size: 11px; color: var(--text-dim); }
+  .stat-card .value { font-size: 24px; font-weight: 700; }
+  .stat-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .stat-chip {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .stat-chip .count { font-weight: 700; color: var(--accent); }
+  #content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+  }
+  #empty-state {
+    color: var(--text-dim);
+    text-align: center;
+    padding: 60px 20px;
+    font-size: 16px;
+  }
+  .incident-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--text-dim);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+    animation: slidein 0.3s ease-in;
+  }
+  @keyframes slidein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .incident-card.critica { border-left-color: var(--red); }
+  .incident-card.alta { border-left-color: var(--orange); }
+  .incident-card.media { border-left-color: var(--yellow); }
+  .incident-card.baja { border-left-color: var(--green); }
+  .incident-card.duplicate { opacity: 0.5; }
+  .incident-card.no-incidente { border-left-color: var(--text-dim); }
+  .ic-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .ic-id { font-weight: 700; font-size: 14px; }
+  .ic-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .ic-badge.critica { background: var(--red); color: #fff; }
+  .ic-badge.alta { background: var(--orange); color: #fff; }
+  .ic-badge.media { background: var(--yellow); color: #000; }
+  .ic-badge.baja { background: var(--green); color: #fff; }
+  .ic-badge.n-a { background: var(--border); color: var(--text-dim); }
+  .ic-badge.canal { background: var(--border); color: var(--text); }
+  .ic-badge.cat { background: var(--bg); color: var(--accent); border: 1px solid var(--border); }
+  .ic-badge.dup { background: var(--orange); color: #fff; }
+  .ic-resumen { font-size: 14px; margin-bottom: 8px; line-height: 1.5; }
+  .ic-causa { font-size: 13px; color: var(--text-dim); margin-bottom: 8px; }
+  .ic-causa strong { color: var(--text); }
+  .ic-actions { margin-bottom: 8px; }
+  .ic-actions li { font-size: 13px; margin-left: 16px; margin-bottom: 2px; }
+  .ic-previos {
+    background: var(--bg);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .ic-previos .title { color: var(--text-dim); margin-bottom: 4px; }
+  .ic-previo { padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .ic-previo:last-child { border-bottom: none; }
+  .ic-previo .ref { color: var(--accent); font-weight: 600; }
+  .ic-footer {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .ic-footer .confianza { color: var(--accent); }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Incident Triage Agent</h1>
+    <div class="actions">
+      <span id="progress-text"></span>
+      <div id="progress-bar"><div id="progress-fill"></div></div>
+      <button class="btn" id="run-btn">Ejecutar Triage</button>
+    </div>
+  </header>
+  <main>
+    <aside id="sidebar">
+      <h2>Estadísticas</h2>
+      <div id="stats-container">
+        <div class="stat-card"><div class="label">Señales totales</div><div class="value" id="stat-total">—</div></div>
+        <div class="stat-card"><div class="label">Incidentes reales</div><div class="value" id="stat-reales">—</div></div>
+        <div class="stat-card"><div class="label">Duplicados detectados</div><div class="value" id="stat-dup">—</div></div>
+        <div class="stat-card"><div class="label">No incidentes</div><div class="value" id="stat-noi">—</div></div>
+      </div>
+      <h2>Por categoría</h2>
+      <div id="cat-container" class="stat-row"></div>
+      <h2>Por severidad</h2>
+      <div id="sev-container" class="stat-row"></div>
+      <h2>Por canal</h2>
+      <div id="canal-container" class="stat-row"></div>
+    </aside>
+    <div id="content">
+      <div id="empty-state">Presiona "Ejecutar Triage" para procesar las señales.</div>
+    </div>
+  </main>
+
+<script>
+const contentEl = document.getElementById("content");
+const runBtn = document.getElementById("run-btn");
+const progressBar = document.getElementById("progress-bar");
+const progressFill = document.getElementById("progress-fill");
+const progressText = document.getElementById("progress-text");
+
+function removeEmptyState() {
+  const el = document.getElementById("empty-state");
+  if (el) el.remove();
+}
+
+function renderIncidente(inc) {
+  removeEmptyState();
+  const card = document.createElement("div");
+  const sev = inc.severidad || "n/a";
+  const isDup = inc.duplicado_de ? " duplicate" : "";
+  const isInc = inc.es_incidente ? "" : " no-incidente";
+  card.className = `incident-card ${sev}${isDup}${isInc}`;
+
+  let html = '<div class="ic-header">';
+  html += `<span class="ic-id">${inc.id}</span>`;
+  html += `<span class="ic-badge canal">${inc.canal_origen}</span>`;
+  html += `<span class="ic-badge cat">${inc.categoria}</span>`;
+  if (inc.es_incidente) {
+    html += `<span class="ic-badge ${sev}">${sev}</span>`;
+  }
+  if (inc.duplicado_de) {
+    html += `<span class="ic-badge dup">dup de ${inc.duplicado_de}</span>`;
+  }
+  if (inc.servicio_afectado) {
+    html += `<span class="ic-badge canal">${inc.servicio_afectado}</span>`;
+  }
+  html += '</div>';
+
+  html += `<div class="ic-resumen">${inc.resumen}</div>`;
+
+  if (inc.causa_raiz_probable) {
+    html += `<div class="ic-causa"><strong>Causa raíz probable:</strong> ${inc.causa_raiz_probable}</div>`;
+  }
+
+  if (inc.acciones_recomendadas && inc.acciones_recomendadas.length > 0) {
+    html += '<div class="ic-actions"><ul>';
+    for (const a of inc.acciones_recomendadas) {
+      html += `<li>${a}</li>`;
+    }
+    html += '</ul></div>';
+  }
+
+  if (inc.incidentes_previos_similares && inc.incidentes_previos_similares.length > 0) {
+    html += '<div class="ic-previos"><div class="title">Incidentes previos similares:</div>';
+    for (const p of inc.incidentes_previos_similares) {
+      html += `<div class="ic-previo"><span class="ref">${p.id}</span> (${p.score}) — ${p.resumen} → <em>${p.solucion}</em></div>`;
+    }
+    html += '</div>';
+  }
+
+  html += '<div class="ic-footer">';
+  html += `<span>${inc.timestamp}</span>`;
+  html += `<span>origen: ${inc.id_externo}</span>`;
+  if (inc.dueño_sugerido) html += `<span>dueño: ${inc.dueño_sugerido}</span>`;
+  html += `<span class="confianza">confianza: ${(inc.confianza * 100).toFixed(0)}%</span>`;
+  html += '</div>';
+
+  card.innerHTML = html;
+  contentEl.appendChild(card);
+}
+
+function updateStats(stats) {
+  document.getElementById("stat-total").textContent = stats.total_senales ?? "—";
+  document.getElementById("stat-reales").textContent = stats.incidentes_reales ?? "—";
+  document.getElementById("stat-dup").textContent = stats.duplicados_detectados ?? "—";
+  document.getElementById("stat-noi").textContent = stats.no_incidentes ?? "—";
+
+  const catEl = document.getElementById("cat-container");
+  catEl.innerHTML = "";
+  if (stats.por_categoria) {
+    for (const [k, v] of Object.entries(stats.por_categoria)) {
+      catEl.innerHTML += `<div class="stat-chip">${k} <span class="count">${v}</span></div>`;
+    }
+  }
+
+  const sevEl = document.getElementById("sev-container");
+  sevEl.innerHTML = "";
+  if (stats.por_severidad) {
+    for (const [k, v] of Object.entries(stats.por_severidad)) {
+      sevEl.innerHTML += `<div class="stat-chip">${k} <span class="count">${v}</span></div>`;
+    }
+  }
+
+  const canalEl = document.getElementById("canal-container");
+  canalEl.innerHTML = "";
+  if (stats.por_canal) {
+    for (const [k, v] of Object.entries(stats.por_canal)) {
+      canalEl.innerHTML += `<div class="stat-chip">${k} <span class="count">${v}</span></div>`;
+    }
+  }
+}
+
+function connectWS() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onmessage = (evt) => {
+    const msg = JSON.parse(evt.data);
+    if (msg.type === "incidente") {
+      renderIncidente(msg.data);
+      const pct = (msg.progress / msg.total * 100).toFixed(0);
+      progressFill.style.width = pct + "%";
+      progressText.textContent = `${msg.progress}/${msg.total}`;
+    } else if (msg.type === "error") {
+      const pct = (msg.progress / msg.total * 100).toFixed(0);
+      progressFill.style.width = pct + "%";
+      progressText.textContent = `${msg.progress}/${msg.total} (error en ${msg.id})`;
+    } else if (msg.type === "done") {
+      updateStats(msg.stats);
+      progressBar.style.display = "none";
+      progressText.textContent = `Completo: ${msg.stats.incidentes_reales} incidentes`;
+      runBtn.disabled = false;
+    }
+  };
+  ws.onclose = () => setTimeout(connectWS, 1500);
+}
+
+runBtn.onclick = async () => {
+  runBtn.disabled = true;
+  contentEl.innerHTML = '<div id="empty-state">Procesando...</div>';
+  progressBar.style.display = "block";
+  progressFill.style.width = "0%";
+  progressText.textContent = "Iniciando...";
+  await fetch("/api/triage", { method: "POST" });
+};
+
+connectWS();
+</script>
+</body>
+</html>
