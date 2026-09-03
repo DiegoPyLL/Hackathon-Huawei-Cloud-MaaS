@@ -130,6 +130,42 @@ def imprimir_categorias(por_categoria: dict) -> None:
     for categoria in sorted(por_categoria):
         for motivo in por_categoria[categoria]["motivos"]:
             print(f"    omitido en {categoria}: {motivo}")
+    escribir_resumen_actions(por_categoria, totales)
+
+
+def escribir_resumen_actions(por_categoria: dict, totales: dict) -> None:
+    """Publica la tabla en el resumen del job cuando corre en GitHub Actions."""
+    destino = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not destino:
+        return
+
+    icono = "❌" if totales["falla"] else "✅"
+    lineas = [
+        f"## {icono} Pruebas por categoría",
+        "",
+        "| Categoría | Total | OK | Falla | Omitido |",
+        "| --- | ---: | ---: | ---: | ---: |",
+    ]
+    for categoria in sorted(por_categoria):
+        f = por_categoria[categoria]
+        lineas.append(
+            f"| `{categoria}` | {f['total']} | {f['ok']} | {f['falla']} | {f['skip']} |"
+        )
+    lineas.append(
+        f"| **TOTAL** | **{totales['total']}** | **{totales['ok']}** "
+        f"| **{totales['falla']}** | **{totales['skip']}** |"
+    )
+
+    motivos = [
+        f"- `{categoria}`: {motivo}"
+        for categoria in sorted(por_categoria)
+        for motivo in por_categoria[categoria]["motivos"]
+    ]
+    if motivos:
+        lineas += ["", "**Omitidos, con su motivo:**", ""] + motivos
+
+    with open(destino, "a", encoding="utf-8") as resumen:
+        resumen.write("\n".join(lineas) + "\n\n")
 
 
 # ===========================================================================

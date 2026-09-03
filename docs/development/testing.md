@@ -38,28 +38,41 @@ un vistazo qué área está cubierta y qué se omitió y por qué:
 
 ## Integración continua
 
-Dos workflows, separados porque tienen fronteras de confianza distintas
-([ADR-0006](../architecture/decisions/0006-ejecucion-programada-y-manual.md)).
+Un único workflow, `.github/workflows/ci.yml`, con **dos jobs**. La frontera de
+confianza del
+[ADR-0006](../architecture/decisions/0006-ejecucion-programada-y-manual.md) se
+mantiene entre jobs en vez de entre archivos: un PR desde un fork puede disparar
+el primero, nunca el segundo.
 
-**`.github/workflows/ci.yml`** — en cada push y cada PR, **sin secretos**:
+**Job `verificacion`** — cada push y cada PR, **sin secretos**:
 
 1. `python -m unittest discover -s tests -v`
 2. `evaluar.py --mode mock`
-3. `ejecutar-corrida.py --mode mock --con-tests`
+3. `ejecutar-corrida.py --mode mock --con-tests --json-out evals/results/corrida-mock.json`
 4. `generate_monitoreo_dumps.py --autotest`
+
+El paso 3 publica la tabla de categorías en el resumen del job, así que el
+desglose se ve en la propia UI de Actions sin abrir los logs. El JSON de la
+corrida se sube como artifact (14 días).
+
+**Job `almacen`** — **con secretos** (`SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`), sólo si el evento no viene de un fork:
+
+```yaml
+if: github.event_name != 'pull_request' ||
+    github.event.pull_request.head.repo.full_name == github.repository
+```
+
+Corre `ejecutar-corrida.py --verificar-almacen`: cuenta las filas de cada tabla,
+sale con 2 si faltan los secretos y con 1 si la base responde mal. Una conexión
+que no se pudo comprobar nunca se da por buena.
+
+La conexión a Supabase se prueba de dos formas distintas: en `verificacion` con
+un `opener` falso, que ejercita cabeceras y errores sin red; en `almacen` contra
+la base real.
 
 Sin `pip install`: el proyecto es stdlib pura. Las acciones van pineadas a SHA y
 el submódulo `.claude/skills` no se clona, porque nada del código lo lee.
-
-**`.github/workflows/verificar-supabase.yml`** — `workflow_dispatch` y a diario,
-**con secretos** (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`), nunca disparado
-por un `pull_request`. Corre `ejecutar-corrida.py --verificar-almacen`, que
-cuenta las filas de cada tabla y falla declarando si la credencial no sirve.
-
-La conexión a Supabase se prueba en los dos sitios, pero de forma distinta: en
-`ci.yml` con un `opener` falso, que ejercita cabeceras y errores sin red; en el
-workflow programado contra la base real. Un fallo de conexión nunca se presenta
-como éxito.
 
 ## Corrida única
 

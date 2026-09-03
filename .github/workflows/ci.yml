@@ -1,26 +1,38 @@
-# Verificación en cada push. Implementa el ADR-0006.
+# Verificación completa del proyecto en un solo workflow.
 #
-# Sin secretos, deliberadamente: un PR desde un fork no debe poder tocar la clave
-# de Kostra ni la service_role de Supabase. La conexión real al almacén se
-# comprueba en verificar-supabase.yml, que sí los usa y no lo disparan los forks.
+# El ADR-0006 pedía separar por frontera de confianza: lo que corre en cada push
+# no debe ver los secretos, porque un PR desde un fork podría leerlos. Aquí esa
+# frontera se mantiene, pero entre *jobs* en vez de entre archivos:
+#
+#   verificacion  -> siempre, sin secretos.   Tests + flujo en mock.
+#   almacen       -> nunca desde un fork, con secretos. Conexión real a Supabase.
+#
+# Un fork puede disparar `verificacion`, jamás `almacen`.
 name: CI
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
+  schedule:
+    # Minuto 17 y no :00 — GitHub descarta ejecuciones en los minutos de más carga.
+    - cron: '17 6 * * *'
 
-# SECURITY.md: restringir los permisos del workflow al mínimo.
+# SECURITY.md: permisos mínimos para todo el workflow.
 permissions:
   contents: read
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Sin secretos. Es el gate de cada push y cada PR, forks incluidos.
+  # ---------------------------------------------------------------------------
   verificacion:
-    name: Tests y evaluación en mock
+    name: Tests y flujo en mock
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      # Acciones pineadas a SHA, no a tag: un tag es móvil (SECURITY.md).
+      # Pineadas a SHA, no a tag: un tag es móvil (SECURITY.md).
       # El submódulo .claude/skills no se clona: nada del código lo lee.
       - name: Descargar el repositorio
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -30,16 +42,56 @@ jobs:
         with:
           python-version: '3.12'
 
-      # No hay pip install: el proyecto es stdlib pura y el Dockerfile
-      # tampoco instala nada.
+      # Sin pip install: el proyecto es stdlib pura, igual que el Dockerfile.
       - name: Suite de pruebas
         run: python -m unittest discover -s tests -v
 
       - name: Evaluación GenAI en mock
         run: python scripts/ejecutablesBase/evaluar.py --mode mock
 
+      # Publica la tabla de categorías en el resumen del job.
       - name: Corrida completa con tests categorizados
-        run: python scripts/ejecutablesBase/ejecutar-corrida.py --mode mock --con-tests
+        run: >-
+          python scripts/ejecutablesBase/ejecutar-corrida.py
+          --mode mock --con-tests --json-out evals/results/corrida-mock.json
 
       - name: Autotest del generador de monitoreo
         run: python projects/monitoreo/generator/generate_monitoreo_dumps.py --autotest
+
+      - name: Guardar el resumen de la corrida
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: corrida-mock
+          path: evals/results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Con secretos. La condición excluye cualquier PR que venga de un fork.
+  # ---------------------------------------------------------------------------
+  almacen:
+    name: Conexión real con Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: verificacion
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Preparar Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      # Sale con código 2 si faltan los secretos y con 1 si la base responde mal:
+      # una conexión que no se pudo comprobar nunca se da por buena.
+      - name: Verificar la conexión y contar filas
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/ejecutablesBase/ejecutar-corrida.py --verificar-almacen
