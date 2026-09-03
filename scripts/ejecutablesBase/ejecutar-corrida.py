@@ -350,12 +350,18 @@ def main() -> int:
     print(f"\n[flujo] modo={config.mode} modelo={config.model} volcados={len(casos)}")
     print(f"[flujo] dataset={args.dataset.relative_to(PROJECT_ROOT)}")
 
-    resultados = [ejecutar_caso(servicio, caso) for caso in casos]
-    for r in resultados:
+    resultados = []
+    for caso in casos:
+        print(f"\n[agente] procesando {caso['id']}...")
+        r = ejecutar_caso(servicio, caso)
+        resultados.append(r)
         if r.get("error"):
             print(f"  {r['id']:<34} FALLO: {r['error']}")
             continue
         c = r["contraste"]
+        for seccion in SECCIONES:
+            marca = "✓" if seccion in c["secciones_presentes"] else "·"
+            print(f"    {marca} {seccion}")
         print(
             f"  {r['id']:<34} {'ok' if r['ok'] else 'incompleto':<11}"
             f" secciones={len(c['secciones_presentes'])}/5"
