@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dev Chat — Simulador</title>
+<style>
+  :root {
+    --sidebar-bg: #3f0e40;
+    --sidebar-hover: #4c1c4d;
+    --sidebar-active: #1164a3;
+    --sidebar-text: #cfc3d1;
+    --sidebar-text-active: #ffffff;
+    --bg: #ffffff;
+    --border: #e2e2e2;
+    --text: #1d1c1d;
+    --text-dim: #616061;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    height: 100vh;
+    display: flex;
+    color: var(--text);
+    background: var(--bg);
+  }
+  #sidebar {
+    width: 240px;
+    flex-shrink: 0;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    display: flex;
+    flex-direction: column;
+    padding: 12px 0;
+  }
+  #sidebar h1 {
+    font-size: 15px;
+    padding: 0 16px 12px 16px;
+    margin: 0;
+    color: #fff;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .status {
+    font-size: 11px;
+    padding: 8px 16px;
+    color: var(--sidebar-text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .status .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #e01e5a;
+  }
+  .status.connected .dot { background: #2eb67d; }
+  .channel-list { margin-top: 8px; overflow-y: auto; }
+  .channel-item {
+    padding: 6px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .channel-item:hover { background: var(--sidebar-hover); }
+  .channel-item.active {
+    background: var(--sidebar-active);
+    color: var(--sidebar-text-active);
+    font-weight: 600;
+  }
+  #speed-control {
+    margin-top: auto;
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  #speed-control label { font-size: 11px; display: block; margin-bottom: 4px; color: var(--sidebar-text); }
+  #speed-control select {
+    width: 100%; padding: 4px; border-radius: 4px; border: none;
+  }
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  #main-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+    font-size: 16px;
+  }
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 20px;
+  }
+  .msg {
+    display: flex;
+    gap: 10px;
+    padding: 6px 0;
+    animation: fadein 0.25s ease-in;
+  }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
+  .avatar {
+    width: 36px; height: 36px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 13px;
+    flex-shrink: 0;
+  }
+  .msg-body { min-width: 0; }
+  .msg-head {
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .msg-author { font-weight: 700; font-size: 14px; }
+  .msg-time { font-size: 11px; color: var(--text-dim); }
+  .msg-channel-tag {
+    font-size: 11px; color: var(--text-dim); background: #f0f0f0;
+    border-radius: 3px; padding: 1px 6px;
+  }
+  .msg-text { font-size: 14px; line-height: 1.4; margin-top: 1px; word-wrap: break-word; }
+  #empty-state {
+    color: var(--text-dim); font-size: 14px; padding: 20px;
+  }
+</style>
+</head>
+<body>
+  <div id="sidebar">
+    <h1>Dev Chat — Simulador</h1>
+    <div class="status" id="status"><span class="dot"></span><span id="status-text">conectando…</span></div>
+    <div class="channel-list" id="channel-list"></div>
+    <div id="speed-control">
+      <label for="speed-select">Velocidad</label>
+      <select id="speed-select">
+        <option value="lento">Lento</option>
+        <option value="normal" selected>Normal</option>
+        <option value="rapido">Rápido</option>
+      </select>
+    </div>
+  </div>
+  <div id="main">
+    <div id="main-header">Todos los canales</div>
+    <div id="messages"><div id="empty-state">Esperando mensajes…</div></div>
+  </div>
+
+<script>
+const ROLE_COLORS = {
+  dev: "#1164a3", sre: "#e01e5a", qa: "#9b51e0", lead: "#2eb67d", pm: "#e8a63d",
+};
+
+let selectedChannel = null; // null = todos
+let allChannels = [];
+
+const messagesEl = document.getElementById("messages");
+const channelListEl = document.getElementById("channel-list");
+const headerEl = document.getElementById("main-header");
+const statusEl = document.getElementById("status");
+const statusTextEl = document.getElementById("status-text");
+const speedSelect = document.getElementById("speed-select");
+
+function initials(name) {
+  return name.replace(/[._]/g, " ").split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function renderChannelList() {
+  channelListEl.innerHTML = "";
+  const items = [{ name: null, label: "Todos los canales" }, ...allChannels.map(c => ({ name: c, label: c }))];
+  for (const item of items) {
+    const div = document.createElement("div");
+    div.className = "channel-item" + (item.name === selectedChannel ? " active" : "");
+    div.textContent = item.label;
+    div.onclick = () => selectChannel(item.name);
+    channelListEl.appendChild(div);
+  }
+}
+
+function selectChannel(name) {
+  selectedChannel = name;
+  headerEl.textContent = name ? name : "Todos los canales";
+  renderChannelList();
+  loadHistory();
+}
+
+function appendMessage(m) {
+  const emptyState = document.getElementById("empty-state");
+  if (emptyState) emptyState.remove();
+
+  const row = document.createElement("div");
+  row.className = "msg";
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.style.background = ROLE_COLORS[m.rol] || "#666";
+  avatar.textContent = initials(m.autor);
+
+  const body = document.createElement("div");
+  body.className = "msg-body";
+
+  const head = document.createElement("div");
+  head.className = "msg-head";
+  const author = document.createElement("span");
+  author.className = "msg-author";
+  author.textContent = m.autor;
+  const time = document.createElement("span");
+  time.className = "msg-time";
+  time.textContent = m.timestamp.slice(11, 16);
+  head.appendChild(author);
+  head.appendChild(time);
+  if (!selectedChannel) {
+    const tag = document.createElement("span");
+    tag.className = "msg-channel-tag";
+    tag.textContent = m.canal;
+    head.appendChild(tag);
+  }
+
+  const text = document.createElement("div");
+  text.className = "msg-text";
+  text.textContent = m.texto;
+
+  body.appendChild(head);
+  body.appendChild(text);
+  row.appendChild(avatar);
+  row.appendChild(body);
+
+  const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 120;
+  messagesEl.appendChild(row);
+  if (nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+async function loadChannels() {
+  const res = await fetch("/api/channels");
+  const data = await res.json();
+  allChannels = data.channels;
+  renderChannelList();
+}
+
+async function loadHistory() {
+  messagesEl.innerHTML = "";
+  const url = selectedChannel ? `/api/history?limit=100&channel=${encodeURIComponent(selectedChannel)}` : "/api/history?limit=100";
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.messages.length === 0) {
+    messagesEl.innerHTML = '<div id="empty-state">Esperando mensajes…</div>';
+  }
+  for (const m of data.messages) appendMessage(m);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function connectWS() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = () => {
+    statusEl.classList.add("connected");
+    statusTextEl.textContent = "en vivo";
+  };
+  ws.onclose = () => {
+    statusEl.classList.remove("connected");
+    statusTextEl.textContent = "reconectando…";
+    setTimeout(connectWS, 1500);
+  };
+  ws.onerror = () => ws.close();
+  ws.onmessage = (evt) => {
+    const m = JSON.parse(evt.data);
+    if (!selectedChannel || m.canal === selectedChannel) appendMessage(m);
+  };
+}
+
+speedSelect.onchange = () => {
+  fetch("/api/speed", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: speedSelect.value }),
+  });
+};
+
+loadChannels().then(loadHistory);
+connectWS();
+</script>
+</body>
+</html>
