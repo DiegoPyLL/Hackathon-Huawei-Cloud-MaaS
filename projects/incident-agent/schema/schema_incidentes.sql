@@ -87,6 +87,26 @@ create index idx_incidentes_creado_en on incidentes (creado_en desc);
 create index idx_incidentes_sistema_afectado on incidentes (sistema_afectado);
 
 -- ------------------------------------------------------------
+-- Tabla: emails_salientes
+-- Borradores generados para comunicar el estado de un incidente.
+-- ------------------------------------------------------------
+create table emails_salientes (
+  id uuid primary key default gen_random_uuid(),
+  incidente_id uuid not null references incidentes(id) on delete cascade,
+  destinatario text not null,
+  asunto text not null,
+  cuerpo text not null,
+  estado text not null default 'borrador'
+    check (estado in ('borrador', 'enviado', 'fallido')),
+  proveedor_id text,
+  creado_en timestamptz not null default now(),
+  enviado_en timestamptz
+);
+
+create index idx_emails_salientes_incidente_id on emails_salientes (incidente_id);
+create index idx_emails_salientes_estado on emails_salientes (estado);
+
+-- ------------------------------------------------------------
 -- Tabla: incidente_eventos
 -- Bitacora de lo que hace el agente con cada incidente
 -- ------------------------------------------------------------
@@ -206,6 +226,7 @@ alter publication supabase_realtime add table emails_entrantes;
 alter table emails_entrantes enable row level security;
 alter table incidentes enable row level security;
 alter table incidente_eventos enable row level security;
+alter table emails_salientes enable row level security;
 
 create policy "service_role_full_access_emails"
   on emails_entrantes for all
@@ -219,5 +240,10 @@ create policy "service_role_full_access_incidentes"
 
 create policy "service_role_full_access_eventos"
   on incidente_eventos for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+create policy "service_role_full_access_salientes"
+  on emails_salientes for all
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');

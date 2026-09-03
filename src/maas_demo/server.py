@@ -37,7 +37,7 @@ def create_handler(config: Config):
                 self._json(
                     HTTPStatus.OK,
                     {"status": "ok", "mode": config.mode, "model": config.model,
-                     "datos": "SUPABASE" if config.supabase_url and config.supabase_service_role_key else "NO CONFIGURADO"},
+                     "datos": "SUPABASE" if config.supabase_url and config.supabase_key else "NO CONFIGURADO"},
                 )
                 return
             if self.path.startswith("/api/corridas/"):

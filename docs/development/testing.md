@@ -7,24 +7,87 @@ python3 -m unittest discover -s tests -v
 ```
 
 Cubre configuración, `.env`, contrato del proveedor, parser SSE, validación del
-caso de uso y API HTTP real sobre un puerto efímero.
+caso de uso, API HTTP real sobre un puerto efímero, el cliente de Supabase, los
+contratos compartidos entre piezas y el generador del canal monitoreo.
 
-> Al 03-09-2026 falla `test_devkit_setup.ClaudeMcpConfigTests.test_claude_target_does_not_require_codex`:
-> parchea `check_claude`, que ya no existe en `configurar-devkit-huawei.py`
-> (se unificó en `check_client`). Es deuda de la prueba, no del script, y es
-> anterior al flujo multiagente. **Es prerrequisito de `ci.yml`**
+> Actualizado el 03-09-2026: la suite está en verde (100 pruebas, 10 omitidas).
+> El fallo de `test_devkit_setup` que este documento describía ya no existe —
+> lo corrigió `27a8fd2` al pasar de `check_claude` a `check_client`.
+>
+> Las 10 omitidas son las de `test_full_flow.py` y `OrquestadorSinDerivaTests`
+> que dependen de `src/maas_demo/orchestrator.py`, todavía en la rama
+> `agente-orquestrador-*`. Se saltan declarando el motivo en vez de romper la
+> colección, y **se reactivan solas** cuando esa rama entre a `main`. Era el
+> prerrequisito de `ci.yml`
 > ([ADR-0006](../architecture/decisions/0006-ejecucion-programada-y-manual.md)):
-> un workflow que corre esta suite en cada push y nace en rojo deja de ser una
-> señal. Se corrige antes de activar el CI, no después.
+> un workflow que nace en rojo deja de ser una señal.
+
+### Categorías
+
+`ejecutar-corrida.py --con-tests` corre la misma suite y la agrupa, para ver de
+un vistazo qué área está cubierta y qué se omitió y por qué:
+
+| Categoría | Qué cubre |
+| --- | --- |
+| `vertical-slice` | config, dotenv, proveedor, servicio, servidor HTTP |
+| `conexion-supabase` | cliente PostgREST: cabeceras, errores, que la key nunca se filtre |
+| `contrato-canonico` | taxonomía, catálogo de acciones, API pública del generador, esquema de `evals/` |
+| `generador-monitoreo` | escenarios, determinismo, dataset versionado, validador |
+| `corrida-unica` | el entrypoint: carga de volcados, contraste, categorización |
+| `flujo-agente` | contratos del orquestador (omitido hasta que llegue a `main`) |
 
 ## Integración continua
 
-`ci.yml` (GitHub Actions) corre la suite rápida y `evaluar.py --mode mock` en
-cada push, sin secretos — ver
-[ADR-0006](../architecture/decisions/0006-ejecucion-programada-y-manual.md).
-La corrida en `live` no forma parte del CI: vive en el workflow programado
-aparte, precisamente para no gastar saldo de Kostra ni exponer credenciales a
-un PR desde un fork.
+Un único workflow, `.github/workflows/ci.yml`, con **dos jobs**. La frontera de
+confianza del
+[ADR-0006](../architecture/decisions/0006-ejecucion-programada-y-manual.md) se
+mantiene entre jobs en vez de entre archivos: un PR desde un fork puede disparar
+el primero, nunca el segundo.
+
+**Job `verificacion`** — cada push y cada PR, **sin secretos**:
+
+1. `python -m unittest discover -s tests -v`
+2. `evaluar.py --mode mock`
+3. `ejecutar-corrida.py --mode mock --con-tests --json-out evals/results/corrida-mock.json`
+4. `generate_monitoreo_dumps.py --autotest`
+
+El paso 3 publica la tabla de categorías en el resumen del job, así que el
+desglose se ve en la propia UI de Actions sin abrir los logs. El JSON de la
+corrida se sube como artifact (14 días).
+
+**Job `almacen`** — **con secretos** (`SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY`), sólo si el evento no viene de un fork:
+
+```yaml
+if: github.event_name != 'pull_request' ||
+    github.event.pull_request.head.repo.full_name == github.repository
+```
+
+Corre `ejecutar-corrida.py --verificar-almacen`: cuenta las filas de cada tabla,
+sale con 2 si faltan los secretos y con 1 si la base responde mal. Una conexión
+que no se pudo comprobar nunca se da por buena.
+
+La conexión a Supabase se prueba de dos formas distintas: en `verificacion` con
+un `opener` falso, que ejercita cabeceras y errores sin red; en `almacen` contra
+la base real.
+
+Sin `pip install`: el proyecto es stdlib pura. Las acciones van pineadas a SHA y
+el submódulo `.claude/skills` no se clona, porque nada del código lo lee.
+
+## Corrida única
+
+```bash
+python3 scripts/ejecutablesBase/ejecutar-corrida.py --mode mock --con-tests
+python3 scripts/ejecutablesBase/ejecutar-corrida.py --caso monitoreo-camino-feliz-01
+python3 scripts/ejecutablesBase/ejecutar-corrida.py --verificar-almacen
+python3 scripts/ejecutablesBase/ejecutar-corrida.py --leer-tabla incidentes
+```
+
+Ejecuta la suite (categorizada), el flujo del agente sobre los volcados de
+`projects/monitoreo/data/monitoreo_dumps.jsonl` y la persistencia, en un solo
+comando. Los tests van primero: si fallan, no se gasta saldo en una corrida que
+ya sabemos rota. A diferencia de `evaluar.py`, contrasta la salida contra el
+bloque `esperado` de cada volcado.
 
 ## Evaluación GenAI
 

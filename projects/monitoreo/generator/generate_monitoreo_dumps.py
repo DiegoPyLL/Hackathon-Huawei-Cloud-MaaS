@@ -32,8 +32,9 @@ import argparse
 import json
 import random
 import sys
+import re
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List
 
 # Rutas por defecto relativas al script, no al directorio desde el que se invoca:
 # el generador debe funcionar igual desde generator/, desde monitoreo/ o desde la
@@ -66,7 +67,12 @@ ACCIONES = {
     "aislar_host", "liberar_bloqueo_tabla", "revertir_deploy",
 }
 
+# --- Especialistas validos (docs/architecture/flujo-agentes.md) ---------------
+ESPECIALISTAS = {"dba", "sysadmin", "secops"}
+
 # --- Vocabulario de Nortia Retail (derivado del repo) -------------------------
+# SERVICIOS es superficie publica: `projects/bus-incidentes/bus.py` lo importa
+# junto a ESCENARIOS, RUTEO_DEFECTO e Ids. No renombrar ni eliminar sin avisar.
 SERVICIOS = ["checkout", "pagos", "auth-service", "api-gateway", "notificaciones",
              "reportes", "bd-clientes", "batch-facturacion", "login-web",
              "app-movil", "cache-redis", "cola-mensajes", "buscar", "pedidos"]
@@ -768,6 +774,77 @@ def elegir_volcados(rng: random.Random, n: int) -> List[dict]:
 
 
 # ===========================================================================
+# Auto-validacion contra el contrato del repo
+# ===========================================================================
+#  El generador no debe poder emitir un dataset que viole el contrato en
+#  silencio. Se comprueba lo mismo que el servidor valida de la respuesta del
+#  modelo (docs/architecture/contratos-agentes.md): tipos cerrados, especialistas
+#  cerrados, action_id del catalogo y patrones de identificador.
+
+RX_IDS = {
+    "ALRT": re.compile(r"^ALRT-(\d{1,6}|77\?\?)$"),   # 77?? = fragmento truncado a proposito
+    "HOST": re.compile(r"^HOST-\d{1,6}$"),
+    "TRX": re.compile(r"^TRX-\d{1,6}$"),
+    "SES": re.compile(r"^SES-\d{1,6}$"),
+    "CRED": re.compile(r"^CRED-\d{1,6}$"),
+    "DEP": re.compile(r"^DEP-\d{1,6}$"),
+}
+
+
+# Nombres que otros proyectos del repo importan de este modulo. Cambiar o quitar
+# uno rompe a quien lo consume, asi que --autotest lo comprueba explicitamente.
+API_PUBLICA = ("ESCENARIOS", "RUTEO_DEFECTO", "SERVICIOS", "Ids", "RUIDOS")
+
+
+def validar(dumps: List[dict], exigir_cobertura: bool = True) -> List[str]:
+    """Devuelve la lista de incumplimientos del contrato. Vacia = todo correcto.
+
+    `exigir_cobertura` pide ademas que los 8 tipos tengan al menos un caso; se
+    desactiva para subconjuntos deliberados (--solo-escenario).
+    """
+    errores: List[str] = []
+    tipos_vistos = set()
+
+    for d in dumps:
+        esp = d["esperado"]
+        for inc, r in esp.get("ruteo", {}).items():
+            tipos_vistos.add(r["tipo"])
+            fuera = set(r["especialistas"]) - ESPECIALISTAS
+            if fuera:
+                errores.append(f"{d['id']}/{inc}: especialista(s) invalido(s) {sorted(fuera)}")
+            if not 1 <= len(r["especialistas"]) <= 2:
+                errores.append(f"{d['id']}/{inc}: {len(r['especialistas'])} especialistas "
+                               f"(el contrato admite 1..2)")
+            if r["tipo"] not in TIPOS:
+                # sin tipo valido no se puede comprobar el ruteo contra la tabla
+                errores.append(f"{d['id']}/{inc}: tipo '{r['tipo']}' fuera de los 8 canonicos")
+            elif RUTEO_DEFECTO[r["tipo"]] not in r["especialistas"]:
+                errores.append(f"{d['id']}/{inc}: tipo '{r['tipo']}' sin su especialista por "
+                               f"defecto '{RUTEO_DEFECTO[r['tipo']]}'")
+
+        incidentes = set(esp.get("ruteo", {}))
+        for a in esp.get("acciones_esperadas", []):
+            if a["action_id"] not in ACCIONES:
+                errores.append(f"{d['id']}: action_id '{a['action_id']}' fuera del catalogo cerrado")
+            if a["incidente"] not in incidentes:
+                errores.append(f"{d['id']}: accion sobre '{a['incidente']}', que no esta en el ruteo")
+
+        # se captura cualquier token con prefijo conocido -- no solo los bien
+        # formados -- para que uno malformado se rechace en vez de pasar inadvertido
+        for token in re.findall(r"\b(?:ALRT|HOST|TRX|SES|CRED|DEP)-[^\s|]*", d["prompt"]):
+            token = token.rstrip(".,;:")
+            prefijo = token.split("-")[0]
+            if not RX_IDS[prefijo].match(token):
+                errores.append(f"{d['id']}: identificador '{token}' no cumple el patron del contrato")
+
+    if exigir_cobertura:
+        faltan = set(TIPOS) - tipos_vistos
+        if faltan:
+            errores.append(f"tipos canonicos sin ningun caso en el dataset: {sorted(faltan)}")
+    return errores
+
+
+# ===========================================================================
 # Salida
 # ===========================================================================
 
@@ -777,8 +854,8 @@ def render_md(dumps: List[dict]) -> str:
         out.append(f"## {d['id']}  ·  segmento: {d['segment']}")
         out.append("")
         out.append("```")
-        cuerpo, _, instr = d["prompt"].partition("(UTC). ")
-        for ln in instr.split(" | "):
+        _, _, cuerpo = d["prompt"].partition("(UTC). ")
+        for ln in cuerpo.split(" | "):
             out.append(ln)
         out.append("```")
         out.append("")
@@ -789,6 +866,54 @@ def render_md(dumps: List[dict]) -> str:
         out.append("```")
         out.append("")
     return "\n".join(out)
+
+
+def cmd_autotest() -> int:
+    """Comprueba lo que otros dan por hecho de este modulo. Devuelve 0 si todo pasa."""
+    fallos = []
+
+    faltan = [n for n in API_PUBLICA if n not in globals()]
+    if faltan:
+        fallos.append(f"faltan nombres que otros proyectos importan: {faltan}")
+
+    # cada escenario debe construirse y declarar un groundtruth coherente
+    rng = random.Random(0)
+    for nombre, fn in ESCENARIOS.items():
+        try:
+            e = fn(Ids(random.Random(0)), rng)
+        except Exception as exc:                                    # noqa: BLE001
+            fallos.append(f"escenario '{nombre}' no se construye: {exc!r}")
+            continue
+        if e["tipo"] not in TIPOS:
+            fallos.append(f"escenario '{nombre}': tipo '{e['tipo']}' fuera de los 8")
+        if RUTEO_DEFECTO.get(e["tipo"]) not in e["especialistas"]:
+            fallos.append(f"escenario '{nombre}': sin el especialista por defecto")
+        if e.get("accion") and e["accion"]["action_id"] not in ACCIONES:
+            fallos.append(f"escenario '{nombre}': accion fuera del catalogo cerrado")
+        if not e.get("lines"):
+            fallos.append(f"escenario '{nombre}': no emite ninguna linea")
+
+    for nombre, fn in RUIDOS.items():
+        r = fn(Ids(random.Random(0)), rng)
+        if not r.get("descartado"):
+            fallos.append(f"ruido '{nombre}': sin el dato que lo descarta")
+
+    # un dataset completo debe cumplir el contrato
+    specs = elegir_volcados(random.Random(7), 40)
+    dumps = [construir_volcado(random.Random(7 + i), i, s["segmento"], s["escenarios"],
+                               s["ruidos"], hostil=s.get("hostil", False),
+                               presupuesto=s.get("presupuesto", False))
+             for i, s in enumerate(specs, start=1)]
+    fallos.extend(validar(dumps))
+
+    if fallos:
+        print(f"AUTOTEST: {len(fallos)} fallo(s)")
+        for f in fallos:
+            print(f"  - {f}")
+        return 1
+    print(f"AUTOTEST OK · {len(ESCENARIOS)} escenarios · {len(RUIDOS)} ruidos · "
+          f"{len(dumps)} volcados · API publica {', '.join(API_PUBLICA)}")
+    return 0
 
 
 def cmd_list() -> None:
@@ -816,14 +941,17 @@ def main(argv=None) -> None:
                     help="lista de ids separada por comas: un volcado camino-feliz por cada uno")
     ap.add_argument("--pretty", action="store_true", help="jsonl indentado (una entrada por bloque)")
     ap.add_argument("--list-escenarios", action="store_true")
+    ap.add_argument("--autotest", action="store_true",
+                    help="comprueba escenarios, contrato y API publica; no escribe nada")
     args = ap.parse_args(argv)
 
     if args.list_escenarios:
         cmd_list()
         return
-    
-    # seed fija
-    rng = random.Random(7)
+    if args.autotest:
+        sys.exit(cmd_autotest())
+
+    rng = random.Random(args.seed)
 
     if args.solo_escenario:
         ids = [s.strip() for s in args.solo_escenario.split(",") if s.strip()]
@@ -839,6 +967,17 @@ def main(argv=None) -> None:
         dumps.append(construir_volcado(
             rng, i, spec["segmento"], spec["escenarios"], spec["ruidos"],
             hostil=spec.get("hostil", False), presupuesto=spec.get("presupuesto", False)))
+
+    # El dataset no se escribe si viola el contrato: un fixture invalido en disco
+    # es peor que un fallo declarado.
+    errores = validar(dumps, exigir_cobertura=not args.solo_escenario)
+    if errores:
+        sys.stderr.write("[error] el dataset generado no cumple el contrato del repo:\n")
+        for e in errores[:20]:
+            sys.stderr.write(f"  - {e}\n")
+        if len(errores) > 20:
+            sys.stderr.write(f"  ... y {len(errores) - 20} mas\n")
+        sys.exit(1)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:

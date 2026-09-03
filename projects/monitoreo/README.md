@@ -87,6 +87,45 @@ monitoreo/
     └── ejemplos.md             render legible (opcional)
 ```
 
+## Superficie pública (no romper)
+
+`projects/bus-incidentes/bus.py` **importa este módulo** para no duplicar la
+taxonomía: reutiliza los 16 escenarios canónicos como fuente de los incidentes
+que reparte a todos los canales.
+
+```python
+from generate_monitoreo_dumps import ESCENARIOS, RUTEO_DEFECTO, SERVICIOS, Ids
+```
+
+Esos nombres —más `RUIDOS`— son API pública: renombrarlos o eliminarlos rompe el
+bus. Están listados en `API_PUBLICA` y `--autotest` lo verifica.
+
+```bash
+# antes de commitear cualquier cambio al generador
+python projects/monitoreo/generator/generate_monitoreo_dumps.py --autotest
+```
+
+Comprueba que los nombres públicos siguen ahí, que los 16 escenarios se
+construyen y declaran groundtruth coherente, que cada ruido trae el dato que lo
+descarta, y que un dataset completo cumple el contrato. No escribe nada.
+
+## Auto-validación
+
+Antes de escribir nada a disco, el generador comprueba su propia salida contra el
+contrato del repo y **aborta sin escribir** si algo no cuadra: un fixture inválido
+en disco es peor que un fallo declarado. Se verifica lo mismo que el servidor
+valida de la respuesta del modelo:
+
+- `tipo` dentro de los 8 canónicos.
+- `especialistas` ⊆ `{dba, sysadmin, secops}`, entre 1 y 2, incluyendo siempre el
+  especialista por defecto de la tabla de ruteo.
+- `action_id` dentro del catálogo cerrado, y referido a un incidente que existe
+  en el `ruteo` del mismo volcado.
+- Identificadores (`ALRT-`, `HOST-`, `TRX-`, `SES-`, `CRED-`, `DEP-`) conformes a
+  los patrones que valida el servidor.
+- Los 8 tipos con al menos un caso (no se exige con `--solo-escenario`, que es un
+  subconjunto deliberado).
+
 ## Alineación con el repo
 
 - **Empresa:** Nortia Retail (`docs/product/clasificacion-incidentes.md`), datos

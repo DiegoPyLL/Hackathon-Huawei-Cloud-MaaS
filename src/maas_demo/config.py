@@ -24,7 +24,12 @@ class Config:
     modelo_especialista: str | None = None
     modelo_consolidacion: str | None = None
     supabase_url: str | None = None
-    supabase_service_role_key: str | None = None
+    supabase_key: str | None = None
+
+    @property
+    def hay_almacen(self) -> bool:
+        """Solo con las dos variables se puede persistir; una sola no basta."""
+        return bool(self.supabase_url and self.supabase_key)
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -46,10 +51,6 @@ class Config:
         modelo_triage = os.getenv("MAAS_MODELO_TRIAGE", model).strip() or model
         modelo_especialista = os.getenv("MAAS_MODELO_ESPECIALISTA", model).strip() or model
         modelo_consolidacion = os.getenv("MAAS_MODELO_CONSOLIDACION", model).strip() or model
-        supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/") or None
-        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip() or None
-        if supabase_url and not supabase_url.startswith("https://"):
-            raise ConfigError("SUPABASE_URL debe usar HTTPS.")
 
         raw_timeout = os.getenv("MAAS_TIMEOUT_SECONDS", "45")
         try:
@@ -58,6 +59,12 @@ class Config:
             raise ConfigError("MAAS_TIMEOUT_SECONDS debe ser numérico.") from error
         if not 1 <= timeout <= 300:
             raise ConfigError("MAAS_TIMEOUT_SECONDS debe estar entre 1 y 300.")
+
+        # La service_role ignora RLS: sobre HTTP plano quedaria expuesta en transito.
+        supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/") or None
+        if supabase_url and not supabase_url.startswith("https://"):
+            raise ConfigError("SUPABASE_URL debe usar HTTPS.")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip() or None
 
         return cls(
             mode=mode,
@@ -69,5 +76,5 @@ class Config:
             modelo_especialista=modelo_especialista,
             modelo_consolidacion=modelo_consolidacion,
             supabase_url=supabase_url,
-            supabase_service_role_key=supabase_key,
+            supabase_key=supabase_key,
         )
