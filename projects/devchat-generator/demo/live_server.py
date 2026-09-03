@@ -31,11 +31,14 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 BASE_DIR = Path(__file__).resolve().parent
+# El Agente 1 mantiene la cola de aprobaciones; este dashboard solo la refleja.
+AGENTE_URL = os.environ.get("AGENTE_URL", "http://localhost:8080")
 PROJECT_ROOT = BASE_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "channels" / "devchat" / "generator"))
@@ -444,6 +447,39 @@ async def set_speed(payload: dict):
     _speed_mode = payload.get("mode", "normal")
     await _broadcast({"type": "speed", "mode": _speed_mode})
     return {"speed_mode": _speed_mode}
+
+
+@app.get("/api/aprobaciones")
+async def listar_aprobaciones():
+    """Proxy a la cola del Agente 1. Va por el servidor y no desde el navegador
+    para no depender de que el otro puerto habilite CORS."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            res = await client.get(f"{AGENTE_URL}/api/aprobaciones")
+            res.raise_for_status()
+            cuerpo = res.json()
+            # El Agente 1 devuelve la lista anidada junto a metadatos de la corrida.
+            lista = cuerpo.get("aprobaciones", []) if isinstance(cuerpo, dict) else cuerpo
+            return {"aprobaciones": lista, "disponible": True}
+    except Exception as e:
+        return {"aprobaciones": [], "disponible": False, "error": str(e)[:120]}
+
+
+@app.post("/api/aprobaciones/{aprobacion_id}")
+async def decidir_aprobacion(aprobacion_id: str, payload: dict):
+    """Aprobar o rechazar. Es el único punto donde una acción propuesta por el
+    agente puede pasar a ejecutarse: siempre con un humano de por medio."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(
+                f"{AGENTE_URL}/api/aprobaciones/{aprobacion_id}",
+                json={"decision": payload.get("decision"),
+                      "actor": payload.get("actor", "operador-demo"),
+                      "nota": payload.get("nota", "")},
+            )
+            return {"ok": res.status_code == 200, "respuesta": res.json()}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
 
 
 @app.get("/api/stats")

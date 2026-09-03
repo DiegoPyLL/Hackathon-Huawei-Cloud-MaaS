@@ -1,19 +1,23 @@
 #!/usr/bin/env python3
 """
-Levanta todos los sistemas interconectados con un solo comando.
+Levanta toda la demo con un solo comando.
 
-    python levantar_todo.py
+    python levantar_todo.py            # todo en modo live
+    python levantar_todo.py --mock     # sin gastar cuota de MaaS
 
-Arranca, en este orden (el bus primero porque los demas leen de el):
+Arranca en este orden, porque los de abajo leen de los de arriba:
 
-    bus         :8010   fuente de verdad de los incidentes
-    dev-chat    :8000   chat tipo Slack, comenta los incidentes del bus
-    semaforo    :8028   dashboard + logs, se pone rojo con los del bus
+    8010  bus         fuente de verdad de los incidentes
+    8000  dev-chat    el equipo comenta los incidentes del bus
+    8028  semaforo    dashboard de estado + consola de logs
+    8001  demo        los 3 canales alimentando al agente en vivo
+    8080  Agente 1    Incident Response Agent (analista, solo lectura)
 
-Ctrl+C corta los tres.
+Ctrl+C corta todo.
 """
 
-import signal
+import argparse
+import os
 import subprocess
 import sys
 import time
@@ -22,37 +26,59 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 PROJECTS = BASE_DIR.parent
 REPO = PROJECTS.parent
+
 VENV_PY = REPO / ".venv" / "Scripts" / "python.exe"
 if not VENV_PY.exists():
     VENV_PY = REPO / ".venv" / "bin" / "python"
 if not VENV_PY.exists():
     VENV_PY = Path(sys.executable)
 
+DEVCHAT = PROJECTS / "devchat-generator" / "channels" / "devchat" / "live_simulator"
+
 SERVICIOS = [
-    ("bus", BASE_DIR, "bus:app", 8010),
-    ("dev-chat", PROJECTS / "devchat-generator" / "channels" / "devchat" / "live_simulator", "server:app", 8000),
-    ("semaforo", PROJECTS / "Metricas(polling)", "main:app", 8028),
+    ("bus", BASE_DIR, ["-m", "uvicorn", "bus:app", "--port", "8010"], 8010),
+    ("dev-chat", DEVCHAT, ["-m", "uvicorn", "server:app", "--port", "8000"], 8000),
+    ("semaforo", PROJECTS / "Metricas(polling)", ["-m", "uvicorn", "main:app", "--port", "8028"], 8028),
+    ("demo", PROJECTS / "devchat-generator" / "demo", ["-m", "uvicorn", "live_server:app", "--port", "8001"], 8001),
+    ("agente-1", REPO, ["-m", "src.maas_demo"], 8080),
 ]
 
 
 def main():
+    ap = argparse.ArgumentParser(description="Levanta la demo completa")
+    ap.add_argument("--mock", action="store_true", help="sin llamadas reales a MaaS")
+    args = ap.parse_args()
+
+    entorno = dict(os.environ)
+    entorno["MAAS_MODE"] = "mock" if args.mock else "live"
+
     procesos = []
     try:
-        for nombre, cwd, app, puerto in SERVICIOS:
+        for nombre, cwd, cmd, puerto in SERVICIOS:
             print(f"[levantar] {nombre:9s} -> http://localhost:{puerto}")
             procesos.append(subprocess.Popen(
-                [str(VENV_PY), "-m", "uvicorn", app, "--port", str(puerto)],
-                cwd=str(cwd),
+                [str(VENV_PY), *cmd], cwd=str(cwd), env=entorno,
             ))
-            # El bus tiene que estar arriba antes de que los otros lo consulten.
             time.sleep(2)
 
-        print("\n  Semaforo y logs : http://localhost:8028")
-        print("  Dev chat        : http://localhost:8000")
-        print("  Bus (API)       : http://localhost:8010/api/verdad")
+        print(f"\n  modo MaaS: {entorno['MAAS_MODE']}\n")
+        print("  Semaforo y logs   http://localhost:8028")
+        print("  Dev chat          http://localhost:8000")
+        print("  Demo del agente   http://localhost:8001")
+        print("  Agente 1          http://localhost:8080")
+        print("  Bus (API)         http://localhost:8010/api/verdad")
+        print("\n  Provocar un incidente:")
+        print('    curl -X POST http://localhost:8010/api/incidentes/provocar \\')
+        print('      -H "Content-Type: application/json" -d \'{"escenario":"caida_tras_deploy"}\'')
+        print("\n  Corrida del agente sobre los 3 canales:")
+        print(f"    {VENV_PY.name} projects/agente-puente/puente.py")
         print("\nCtrl+C para cortar todo.\n")
 
-        signal.pause() if hasattr(signal, "pause") else _esperar(procesos)
+        while True:
+            time.sleep(1)
+            if any(p.poll() is not None for p in procesos):
+                print("[levantar] un servicio murio, cortando el resto")
+                break
     except KeyboardInterrupt:
         pass
     finally:
@@ -64,15 +90,6 @@ def main():
             except subprocess.TimeoutExpired:
                 p.kill()
         print("\n[levantar] todo detenido")
-
-
-def _esperar(procesos):
-    """Windows no tiene signal.pause()."""
-    while True:
-        time.sleep(1)
-        if any(p.poll() is not None for p in procesos):
-            print("[levantar] un servicio murio, cortando el resto")
-            return
 
 
 if __name__ == "__main__":

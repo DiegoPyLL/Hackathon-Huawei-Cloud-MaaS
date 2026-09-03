@@ -124,7 +124,7 @@ def preguntar_al_agente(volcado: str) -> dict:
                  "reporte": "", "meta": {}, "error": None}
     texto = []
     try:
-        with urllib.request.urlopen(req, timeout=180) as res:
+        with urllib.request.urlopen(req, timeout=600) as res:
             for raw in res:
                 linea = raw.decode("utf-8").strip()
                 if not linea.startswith("data:"):
