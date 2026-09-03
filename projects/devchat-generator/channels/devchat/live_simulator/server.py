@@ -24,13 +24,15 @@ Uso:
 import asyncio
 import copy
 import json
+import os
 import random
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+import httpx
+from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "generator"))
@@ -49,6 +51,21 @@ PUBLIC_LOG = DATA_DIR / "devchat_live_public.jsonl"
 GROUNDTRUTH_LOG = DATA_DIR / "devchat_live_groundtruth.jsonl"
 
 PUBLIC_FIELDS = ("seq", "canal", "autor", "rol", "timestamp", "texto")
+
+# Ningún sistema de mensajería real deja sus endpoints abiertos: el feed exige
+# token, igual que haría falta un token de bot para leer Slack de verdad.
+API_TOKEN = os.environ.get("DEVCHAT_API_TOKEN", "devchat-dev-token")
+
+# Fuente de verdad de qué incidentes están pasando (projects/bus-incidentes).
+BUS_URL = os.environ.get("BUS_URL", "http://localhost:8010")
+# Parte de los incidentes nunca se comenta en el chat, aunque sí salgan en
+# monitoreo y en el semáforo.
+P_REPORTAR_EN_CHAT = 0.8
+
+
+def require_token(authorization: str = Header(default="")):
+    if authorization != f"Bearer {API_TOKEN}":
+        raise HTTPException(status_code=401, detail="token inválido o faltante")
 
 MAX_ACTIVE_THREADS = 5
 P_SPAWN_NEW = 0.45
@@ -132,14 +149,21 @@ def build_charla_cfg(category: str) -> dict:
 
 
 class LiveThread:
-    def __init__(self, thread_id: str, category: str, cfg: dict, kb: list):
+    def __init__(self, thread_id: str, category: str, cfg: dict, kb: list, incidente: dict | None = None):
         self.thread_id = thread_id
         self.category = category
         self.es_incidente = cfg["es_incidente"]
         self.canal = random.choice(CHANNELS)
-        self.servicio = random.choice(SERVICES)
+        # Si el hilo viene del bus, el servicio y la severidad los dicta el
+        # incidente real — es lo que permite correlacionarlo con monitoreo y el
+        # semáforo. Si no, el hilo es charla local y se inventa lo suyo.
+        self.incidente_id = incidente["incidente_id"] if incidente else None
+        self.servicio = incidente["servicio"] if incidente else random.choice(SERVICES)
         self.participantes = random.sample(USERS, k=random.randint(2, 4))
-        self.severidad = weighted_choice(cfg["severidad_pool"]) if cfg.get("severidad_pool") else "n/a"
+        if incidente:
+            self.severidad = incidente["severidad"]
+        else:
+            self.severidad = weighted_choice(cfg["severidad_pool"]) if cfg.get("severidad_pool") else "n/a"
         self.tono = random.choices(["urgente", "neutral", "casual"], weights=[0.35, 0.4, 0.25], k=1)[0]
         self.deploy_relacionado = self.es_incidente and random.random() < 0.25
         self.menciona_prev = False
@@ -199,6 +223,7 @@ class LiveThread:
             "deploy_relacionado": self.deploy_relacionado,
             "menciona_incidente_previo": self.menciona_prev,
             "id_incidente_previo_referenciado": self.id_prev,
+            "incidente_id": self.incidente_id,
             "thread_msg_index": self.emitted,
             "thread_msg_count_planned": len(self.queue),
             "thread_resuelto": self.resuelto and self.emitted == len(self.queue),
@@ -216,6 +241,10 @@ class ChatEngine:
         self._thread_counter = 0
         self._task: asyncio.Task | None = None
 
+        self.incidentes_bus: list[dict] = []
+        self._incidentes_vistos: set[str] = set()
+        self.bus_conectado = False
+
         self.stats = {
             "inicio": datetime.now().isoformat(timespec="seconds"),
             "total_mensajes": 0,
@@ -226,6 +255,8 @@ class ChatEngine:
             "hilos_normales": 0,
             "hilos_por_categoria": {},
             "hilos_por_severidad": {},
+            "incidentes_bus_reportados": 0,
+            "incidentes_bus_no_reportados": 0,
         }
 
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -233,18 +264,27 @@ class ChatEngine:
         self._groundtruth_log = open(GROUNDTRUTH_LOG, "w", encoding="utf-8")
 
     def _spawn_thread(self):
-        incident_weights = {c: CATEGORIES[c]["weight"] for c in CATEGORIES if CATEGORIES[c]["es_incidente"]}
-        pool = {**incident_weights, "solicitud": CHARLA_NORMAL["solicitud"]["weight"], "ruido": CHARLA_NORMAL["ruido"]["weight"]}
-        category = weighted_choice(pool)
+        # Primero se mira si el bus tiene un incidente real que el chat todavía
+        # no comentó. Si lo hay, el hilo habla de ESE incidente; si no, se genera
+        # charla local (solicitud/ruido), que no necesita correlacionarse.
+        incidente = self._tomar_incidente_pendiente()
 
-        if category in ("solicitud", "ruido"):
+        if incidente:
+            category = incidente["tipo"].replace("-", "_")
+            cfg = CATEGORIES.get(category)
+            if cfg is None:
+                incidente = None
+
+        if not incidente:
+            category = weighted_choice({
+                "solicitud": CHARLA_NORMAL["solicitud"]["weight"],
+                "ruido": CHARLA_NORMAL["ruido"]["weight"],
+            })
             cfg = build_charla_cfg(category)
-        else:
-            cfg = CATEGORIES[category]
 
         self._thread_counter += 1
         thread_id = f"DEVCHAT-LIVE-{self._thread_counter:04d}"
-        thread = LiveThread(thread_id, category, cfg, self.kb)
+        thread = LiveThread(thread_id, category, cfg, self.kb, incidente=incidente)
         self.active.append(thread)
 
         self.stats["total_hilos"] += 1
@@ -254,6 +294,52 @@ class ChatEngine:
         else:
             self.stats["hilos_normales"] += 1
         self.stats["hilos_por_categoria"][category] = self.stats["hilos_por_categoria"].get(category, 0) + 1
+
+        if incidente:
+            self.stats["incidentes_bus_reportados"] += 1
+            asyncio.create_task(self._avisar_al_bus(incidente["incidente_id"]))
+
+    async def _avisar_al_bus(self, incidente_id: str):
+        """Le dice al bus que este canal ya reportó el incidente, para que la
+        vista de correlación sepa por dónde entró cada señal."""
+        try:
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                await client.post(
+                    f"{BUS_URL}/api/incidentes/{incidente_id}/reportado",
+                    json={"canal": "dev-chat"},
+                )
+        except Exception:
+            pass
+
+    def _tomar_incidente_pendiente(self) -> dict | None:
+        """Devuelve un incidente del bus que este chat todavía no comentó.
+
+        A propósito no se reporta todo: una parte de los incidentes nunca se
+        menciona en el chat aunque sí aparezca en monitoreo y en el semáforo.
+        Esa asimetría es la que obliga al agente a correlacionar de verdad en vez
+        de asumir que los tres canales dicen siempre lo mismo."""
+        for inc in self.incidentes_bus:
+            if inc["incidente_id"] in self._incidentes_vistos:
+                continue
+            self._incidentes_vistos.add(inc["incidente_id"])
+            if random.random() < P_REPORTAR_EN_CHAT:
+                return inc
+            self.stats["incidentes_bus_no_reportados"] += 1
+        return None
+
+    async def _poll_bus(self):
+        """El bus es la fuente de verdad de qué incidentes están pasando. Si no
+        está levantado, el chat sigue funcionando solo con charla local."""
+        while True:
+            try:
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    res = await client.get(f"{BUS_URL}/api/incidentes/activos")
+                    res.raise_for_status()
+                    self.incidentes_bus = res.json()["incidentes"]
+                    self.bus_conectado = True
+            except Exception:
+                self.bus_conectado = False
+            await asyncio.sleep(5)
 
     async def _broadcast(self, message: dict):
         dead = set()
@@ -307,6 +393,7 @@ class ChatEngine:
     def start(self):
         if self._task is None:
             self._task = asyncio.create_task(self.run())
+            asyncio.create_task(self._poll_bus())
 
     def set_speed(self, mode: str):
         if mode in SPEED_PRESETS:
@@ -320,20 +407,24 @@ app = FastAPI()
 @app.on_event("startup")
 async def on_startup():
     engine.start()
+    print(f"[devchat] token requerido para /api/* y /ws -> {API_TOKEN}", flush=True)
+    print(f"[devchat] bus de incidentes -> {BUS_URL}", flush=True)
 
 
 @app.get("/")
 async def index():
-    return FileResponse(BASE_DIR / "static" / "index.html")
+    html = (BASE_DIR / "static" / "index.html").read_text(encoding="utf-8")
+    html = html.replace("__API_TOKEN__", API_TOKEN)
+    return HTMLResponse(html)
 
 
 @app.get("/api/channels")
-async def get_channels():
+async def get_channels(_: None = Depends(require_token)):
     return {"channels": CHANNELS}
 
 
 @app.get("/api/history")
-async def get_history(limit: int = 50, channel: str | None = None):
+async def get_history(limit: int = 50, channel: str | None = None, _: None = Depends(require_token)):
     items = engine.history
     if channel:
         items = [m for m in items if m["canal"] == channel]
@@ -341,7 +432,7 @@ async def get_history(limit: int = 50, channel: str | None = None):
 
 
 @app.post("/api/speed")
-async def set_speed(payload: dict):
+async def set_speed(payload: dict, _: None = Depends(require_token)):
     engine.set_speed(payload.get("mode", "normal"))
     return {"speed_mode": engine.speed_mode}
 
@@ -351,11 +442,15 @@ async def get_stats():
     """Groundtruth de monitoreo — no linkeado desde la UI del chat. Cuenta
     la realidad (mensajes/hilos, incidente vs normal) para medir después
     contra lo que detecte el agente."""
-    return engine.stats
+    return {**engine.stats, "bus_conectado": engine.bus_conectado}
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    if websocket.query_params.get("token") != API_TOKEN:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     engine.connections.add(websocket)
     try:
