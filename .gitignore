@@ -6,9 +6,9 @@
 !.claude/skills
 
 # Entorno y secretos
-.env
-.env.*
-!.env.example
+#.env
+#.env.*
+#!.env.example
 
 # Codex
 # Solo se comparte la configuracion MCP del proyecto.
