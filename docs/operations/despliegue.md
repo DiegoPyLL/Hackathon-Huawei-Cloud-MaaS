@@ -29,7 +29,7 @@ exponerlo directamente con `MAAS_MODE=live` permitiría consumo no autorizado.
 ## Gate de evidencia
 
 ```bash
-python3 scripts/prueba-humo.py --url https://URL-DESPLEGADA --require-mode live
+python3 scripts/ejecutablesBase/prueba-humo.py --url https://URL-DESPLEGADA --require-mode live
 ```
 
 Guardar junto a la demo: fecha, URL, commit del proyecto, modelo, región y salida

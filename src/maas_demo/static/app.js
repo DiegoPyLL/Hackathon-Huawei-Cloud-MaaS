@@ -39,11 +39,11 @@ function consumeSseBlock(block) {
   if (event.type === "error") throw new Error(event.error);
 }
 
-async function generateBrief() {
+async function investigateIncident() {
   const content = promptInput.value.trim();
   if (!content) {
     promptInput.focus();
-    status.textContent = "Describe un reto primero";
+    status.textContent = "Pega el incidente primero";
     return;
   }
 
@@ -89,5 +89,5 @@ document.querySelectorAll("[data-prompt]").forEach((button) => {
     promptInput.focus();
   });
 });
-submitButton.addEventListener("click", generateBrief);
+submitButton.addEventListener("click", investigateIncident);
 loadHealth();

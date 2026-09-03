@@ -23,14 +23,14 @@ que el componente nuevo participe en la demo.
 
 ```bash
 python3 -m unittest discover -s tests -v
-python3 scripts/evaluar.py --mode mock
+python3 scripts/ejecutablesBase/evaluar.py --mode mock
 ```
 
 Para afirmar que la integración real funciona también debe pasar:
 
 ```bash
-python3 scripts/evaluar.py --mode live
-python3 scripts/prueba-humo.py --url URL --require-mode live
+python3 scripts/ejecutablesBase/evaluar.py --mode live
+python3 scripts/ejecutablesBase/prueba-humo.py --url URL --require-mode live
 ```
 
 ## Fuentes del repositorio

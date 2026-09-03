@@ -4,14 +4,26 @@
 
 > Rellenar al iniciar el proyecto. Todo lo demás en este archivo es doctrina fija y no debe editarse por proyecto.
 
-Desarrollar **MaaS Decision Brief**: convertir un reto ambiguo en un brief
-accionable mediante un vertical slice demostrable sobre Huawei Cloud MaaS.
+Desarrollar **Incident Response Agent**: investigar un incidente simulado
+(logs sintéticos de acceso web, con ruido y falsos positivos), identificar la
+causa raíz más probable, y proponer o ejecutar una corrección — como el
+problema de negocio concreto que reemplaza el reto genérico del vertical slice
+MaaS Decision Brief (ver `docs/product/vision.md`).
 
-- **Usuarios:** equipos que presentan una solución GenAI y jurados que necesitan
-  comprender su valor y evidencia en pocos minutos.
-- **Dominio:** prototipado y soporte a decisiones con modelos generativos.
-- **Diferenciador:** modo real o simulado siempre visible, streaming, métricas y
-  evaluación repetible desde el primer vertical slice.
+- **Usuarios:** jurado y equipos que evalúan si un agente GenAI puede razonar
+  sobre evidencia ruidosa y llegar a una conclusión defendible.
+- **Dominio:** respuesta a incidentes / análisis de logs con IA.
+- **Diferenciador:** cada conclusión cita evidencia concreta (línea de log,
+  timestamp, ID de alerta específico) — nunca se afirma una causa raíz sin
+  señalar el dato que la respalda. El razonamiento del agente (qué investigó,
+  qué descartó, por qué) queda visible en texto plano durante la ejecución, no
+  oculto.
+
+Alcance: todo el trabajo del agente ocurre dentro de este proyecto, sin tocar
+nada fuera de esta carpeta. Aplica los patrones de detección/metodología ya
+cargados a nivel global (`~/.claude/CLAUDE.md`, pentest-brain) como
+conocimiento de fondo — no hace falta repetirlos aquí, solo referenciar que se
+usan.
 
 Debes priorizar: rendimiento, calidad técnica, diseño y posicionamiento en buscadores.
 

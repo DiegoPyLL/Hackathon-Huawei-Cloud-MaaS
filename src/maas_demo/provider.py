@@ -39,14 +39,25 @@ class MockProvider:
         )
         subject = " ".join(prompt.split())[:120]
         answer = (
-            "Resumen ejecutivo\n"
-            f"El reto planteado es: {subject}.\n\n"
-            "Acción prioritaria\n"
-            "Construye primero un flujo extremo a extremo medible y elimina todo "
-            "componente que no participe en la demostración.\n\n"
-            "Evidencia para la demo\n"
-            "Muestra el resultado, el modo de ejecución, la latencia y una prueba "
-            "repetible que permita comparar la siguiente iteración."
+            "Tipo de incidente\n"
+            "Clasificación pendiente de confirmar contra los 8 tipos canónicos "
+            "(indisponibilidad, degradación, error funcional, acceso e "
+            "identidad, datos, integración y terceros, capacidad, seguridad).\n\n"
+            "Causa raíz probable\n"
+            f"Incidente reportado: {subject}.\n"
+            "El patrón dominante en los logs adjuntos apunta a un único origen; "
+            "revisa la línea con mayor frecuencia de error y el ID de alerta que "
+            "la acompaña antes de confirmar.\n\n"
+            "Evidencia\n"
+            "Cita la línea de log exacta, el timestamp y el ID de alerta que "
+            "respaldan la causa raíz — sin esos tres datos la conclusión no es "
+            "defendible.\n\n"
+            "Qué se descartó\n"
+            "Nombra cada hipótesis alternativa considerada y el dato puntual que "
+            "la descartó, para dejar el razonamiento visible.\n\n"
+            "Acción correctiva\n"
+            "Propone una corrección concreta y reversible; no afirmes haberla "
+            "ejecutado, solo describe el plan y cómo verificarlo."
         )
         for chunk in _chunks(answer):
             yield {"type": "delta", "delta": chunk}

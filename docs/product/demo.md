@@ -4,7 +4,7 @@
 
 1. Ejecutar pruebas y evaluación.
 2. Iniciar el servidor en `live` y comprobar `/api/health`.
-3. Ejecutar `scripts/prueba-humo.py --require-mode live`.
+3. Ejecutar `scripts/ejecutablesBase/prueba-humo.py --require-mode live`.
 4. Mantener una segunda terminal lista para iniciar `mock`, claramente etiquetado,
    solo si la red o el proveedor no están disponibles.
 

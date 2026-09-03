@@ -1,10 +1,11 @@
 ![alt text](image.png)
 
-# MaaS Decision Brief
+# Incident Response Brief
 
-Vertical slice para Huawei Cloud ModelArts Studio (MaaS): convierte un reto
-ambiguo en un brief accionable mediante una experiencia web con streaming,
-métricas y modo de ejecución visible.
+Vertical slice para Huawei Cloud ModelArts Studio (MaaS): un Incident Response
+Agent que investiga logs sintéticos con ruido y falsos positivos, cita
+evidencia concreta para su causa raíz y propone una corrección, mediante una
+experiencia web con streaming, métricas y modo de ejecución visible.
 
 El objetivo actual no es fingir un producto terminado, sino demostrar en pocos
 minutos que la integración completa funciona y se puede evaluar.
@@ -29,17 +30,17 @@ La configuración MCP compartida está disponible para Codex en
 
 ```bash
 # Detectar, configurar y comprobar los clientes instalados
-python3 scripts/configurar-devkit-huawei.py
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py
 
 # Configurar credenciales mediante el flujo interactivo de Huawei
-python3 scripts/configurar-devkit-huawei.py --auth
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py --auth
 
 # Trabajar solamente con uno de los clientes
-python3 scripts/configurar-devkit-huawei.py --target codex
-python3 scripts/configurar-devkit-huawei.py --target claude
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py --target codex
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py --target claude
 
 # Exigir que ambos clientes estén instalados
-python3 scripts/configurar-devkit-huawei.py --target both
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py --target both
 ```
 
 Consulta [`docs/development/entorno.md`](docs/development/entorno.md) para el
@@ -82,14 +83,14 @@ falla, la demo muestra el error.
 python3 -m unittest discover -s tests -v
 
 # Dataset mínimo determinista
-python3 scripts/evaluar.py --mode mock
+python3 scripts/ejecutablesBase/evaluar.py --mode mock
 
 # Con el servidor iniciado
-python3 scripts/prueba-humo.py --require-mode mock
+python3 scripts/ejecutablesBase/prueba-humo.py --require-mode mock
 
 # Antes de presentar evidencia cloud real
-python3 scripts/evaluar.py --mode live
-python3 scripts/prueba-humo.py --url https://URL-DESPLEGADA --require-mode live
+python3 scripts/ejecutablesBase/evaluar.py --mode live
+python3 scripts/ejecutablesBase/prueba-humo.py --url https://URL-DESPLEGADA --require-mode live
 ```
 
 El último comando falla si el despliegue responde en `mock`; así una simulación

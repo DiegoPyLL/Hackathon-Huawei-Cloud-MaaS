@@ -20,7 +20,7 @@ fijada para que todos los integrantes utilicen las mismas herramientas.
 Desde la raiz del repositorio:
 
 ```bash
-python3 scripts/configurar-devkit-huawei.py
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py
 ```
 
 El comando valida Node.js y detecta cuáles clientes están disponibles, conserva
@@ -32,18 +32,18 @@ Opciones disponibles:
 
 ```bash
 # Mostrar acciones sin instalar ni modificar archivos
-python3 scripts/configurar-devkit-huawei.py --dry-run
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py --dry-run
 
 # Configurar solamente uno de los clientes MCP
-python3 scripts/configurar-devkit-huawei.py --target codex
-python3 scripts/configurar-devkit-huawei.py --target claude
-python3 scripts/configurar-devkit-huawei.py --target both
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py --target codex
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py --target claude
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py --target both
 
 # Configurar tambien las credenciales de forma interactiva
-python3 scripts/configurar-devkit-huawei.py --auth
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py --auth
 
 # Configurar solo MCP cuando KooCLI ya esta instalado o no se necesita
-python3 scripts/configurar-devkit-huawei.py --skip-koocli
+python3 scripts/ejecutablesBase/configurar-devkit-huawei.py --skip-koocli
 ```
 
 La autenticación no lee `.env` ni acepta secretos como argumentos. Las

@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.maas_demo.config import Config, ConfigError  # noqa: E402
@@ -20,7 +20,7 @@ from src.maas_demo.provider import ProviderError, build_provider  # noqa: E402
 from src.maas_demo.service import ChatService  # noqa: E402
 
 
-REQUIRED_HEADINGS = ("Resumen ejecutivo", "Acción prioritaria", "Evidencia")
+REQUIRED_HEADINGS = ("Causa raíz", "Evidencia", "Acción correctiva")
 
 
 def parse_args() -> argparse.Namespace:

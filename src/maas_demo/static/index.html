@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Vertical slice demostrable sobre Huawei Cloud ModelArts Studio MaaS."
+      content="Incident Response Agent sobre Huawei Cloud ModelArts Studio MaaS: investiga logs con ruido y cita evidencia."
     />
-    <title>MaaS Decision Brief</title>
+    <title>Incident Response Brief</title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="/app.js" defer></script>
   </head>
@@ -16,7 +16,7 @@
       <header class="hero">
         <div>
           <p class="eyebrow">Huawei Cloud · ModelArts Studio</p>
-          <h1>Convierte un reto ambiguo en una decisión demostrable.</h1>
+          <h1>Convierte logs ruidosos en una causa raíz defendible.</h1>
           <p class="lede">
             Un vertical slice con streaming, métricas y modo de ejecución visible.
           </p>
@@ -26,31 +26,31 @@
 
       <section class="workspace" aria-labelledby="challenge-title">
         <div class="input-panel">
-          <h2 id="challenge-title">Describe el reto</h2>
-          <label for="prompt">¿Qué decisión necesitas tomar?</label>
+          <h2 id="challenge-title">Pega el incidente</h2>
+          <label for="prompt">¿Qué logs o alertas necesitas investigar?</label>
           <textarea
             id="prompt"
             maxlength="4000"
             rows="7"
-            placeholder="Ej.: Queremos reducir el tiempo de atención sin perder trazabilidad…"
+            placeholder="Ej.: 10:15:03 500 GET /checkout alert=ALRT-9001, justo después de un deploy…"
           ></textarea>
           <div class="examples" aria-label="Ejemplos">
-            <button type="button" data-prompt="Diseña una demo de IA que un jurado entienda en tres minutos.">
-              Demo en 3 minutos
+            <button type="button" data-prompt="10:15:03 500 GET /checkout alert=ALRT-9001, justo después de un deploy. ¿Cuál es la causa raíz?">
+              Spike tras deploy
             </button>
-            <button type="button" data-prompt="Reduce el tiempo de respuesta de soporte manteniendo revisión humana.">
-              Soporte asistido
+            <button type="button" data-prompt="Tres 401 seguidos de la cuenta de servicio svc-cache. El equipo sospecha fuerza bruta. Evalúa la hipótesis con la evidencia disponible.">
+              ¿Ataque o falso positivo?
             </button>
           </div>
-          <button id="submit" class="primary" type="button">Generar brief</button>
+          <button id="submit" class="primary" type="button">Investigar incidente</button>
         </div>
 
         <article class="output-panel" aria-labelledby="result-title">
           <div class="output-header">
-            <h2 id="result-title">Brief de decisión</h2>
+            <h2 id="result-title">Diagnóstico del incidente</h2>
             <span id="status">Listo</span>
           </div>
-          <pre id="answer" tabindex="0">La respuesta aparecerá aquí.</pre>
+          <pre id="answer" tabindex="0">El diagnóstico aparecerá aquí.</pre>
           <dl class="metrics">
             <div><dt>Modo</dt><dd id="metric-mode">—</dd></div>
             <div><dt>Modelo</dt><dd id="metric-model">—</dd></div>

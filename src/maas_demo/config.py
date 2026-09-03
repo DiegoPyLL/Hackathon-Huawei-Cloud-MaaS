@@ -32,7 +32,7 @@ class Config:
             raise ConfigError("MAAS_API_KEY es obligatoria cuando MAAS_MODE=live.")
 
         base_url = os.getenv("MAAS_BASE_URL", DEFAULT_BASE_URL).strip().rstrip("/")
-        model = os.getenv("MAAS_MODEL", "glm-5.2").strip()
+        model = os.getenv("MAAS_MODEL", "deepseek-v4-pro").strip()
         if not base_url.startswith("https://"):
             raise ConfigError("MAAS_BASE_URL debe usar HTTPS.")
         if not model:
