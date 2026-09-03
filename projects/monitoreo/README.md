@@ -87,6 +87,23 @@ monitoreo/
     └── ejemplos.md             render legible (opcional)
 ```
 
+## Auto-validación
+
+Antes de escribir nada a disco, el generador comprueba su propia salida contra el
+contrato del repo y **aborta sin escribir** si algo no cuadra: un fixture inválido
+en disco es peor que un fallo declarado. Se verifica lo mismo que el servidor
+valida de la respuesta del modelo:
+
+- `tipo` dentro de los 8 canónicos.
+- `especialistas` ⊆ `{dba, sysadmin, secops}`, entre 1 y 2, incluyendo siempre el
+  especialista por defecto de la tabla de ruteo.
+- `action_id` dentro del catálogo cerrado, y referido a un incidente que existe
+  en el `ruteo` del mismo volcado.
+- Identificadores (`ALRT-`, `HOST-`, `TRX-`, `SES-`, `CRED-`, `DEP-`) conformes a
+  los patrones que valida el servidor.
+- Los 8 tipos con al menos un caso (no se exige con `--solo-escenario`, que es un
+  subconjunto deliberado).
+
 ## Alineación con el repo
 
 - **Empresa:** Nortia Retail (`docs/product/clasificacion-incidentes.md`), datos
