@@ -12,7 +12,19 @@ caso de uso y API HTTP real sobre un puerto efímero.
 > Al 03-09-2026 falla `test_devkit_setup.ClaudeMcpConfigTests.test_claude_target_does_not_require_codex`:
 > parchea `check_claude`, que ya no existe en `configurar-devkit-huawei.py`
 > (se unificó en `check_client`). Es deuda de la prueba, no del script, y es
-> anterior al flujo multiagente.
+> anterior al flujo multiagente. **Es prerrequisito de `ci.yml`**
+> ([ADR-0006](../architecture/decisions/0006-ejecucion-programada-y-manual.md)):
+> un workflow que corre esta suite en cada push y nace en rojo deja de ser una
+> señal. Se corrige antes de activar el CI, no después.
+
+## Integración continua
+
+`ci.yml` (GitHub Actions) corre la suite rápida y `evaluar.py --mode mock` en
+cada push, sin secretos — ver
+[ADR-0006](../architecture/decisions/0006-ejecucion-programada-y-manual.md).
+La corrida en `live` no forma parte del CI: vive en el workflow programado
+aparte, precisamente para no gastar saldo de Kostra ni exponer credenciales a
+un PR desde un fork.
 
 ## Evaluación GenAI
 

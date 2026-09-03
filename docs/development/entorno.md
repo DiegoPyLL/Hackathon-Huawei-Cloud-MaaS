@@ -68,6 +68,15 @@ El modo local no necesita instalar paquetes:
 MAAS_MODE=mock python3 -m src.maas_demo
 ```
 
+Para disparar una corrida completa a mano, sin levantar el servidor:
+
+```bash
+python3 scripts/ejecutablesBase/ejecutar-corrida.py --mode mock
+```
+
+Es el mismo código que ejecuta el workflow programado de GitHub Actions — ver
+[ADR-0006](../architecture/decisions/0006-ejecucion-programada-y-manual.md).
+
 Para usar inferencia real, copiar `.env.example` a `.env`, establecer
 `MAAS_MODE=live` y completar `MAAS_API_KEY` con una clave `sk-...` de Kostra. El
 modelo debe ser uno de los que la cuenta tiene habilitados; ver la tabla de
@@ -123,6 +132,18 @@ ser Huawei MaaS. Hoy apunta a Kostra. El renombrado es deuda registrada en el
 `dotenv.py` solo admite las variables de su lista blanca `ALLOWED_KEYS`, que abarca
 los prefijos `MAAS_*` y `SUPABASE_*`. Una variable nueva no entra sola: hay que
 añadirla ahí a propósito. Esa fricción es intencional.
+
+**`ALLOWED_KEYS` gobierna solo el archivo `.env` local.** En GitHub Actions no
+hay `.env`: el workflow programado lee `MAAS_API_KEY` y
+`SUPABASE_SERVICE_ROLE_KEY` desde GitHub Secrets directamente al entorno del
+job, y `Config.from_env()` los toma de `os.environ` igual que en local. Ver
+[ADR-0006](../architecture/decisions/0006-ejecucion-programada-y-manual.md).
+
+| Dónde corre | Dónde vive el secreto |
+| --- | --- |
+| Local (`python3 -m src.maas_demo`, script manual) | `.env`, filtrado por `ALLOWED_KEYS` |
+| CI (`ci.yml`, cada push) | Ninguno — corre siempre en `mock` |
+| Corrida programada (`corrida-programada.yml`) | GitHub Secrets del repositorio |
 
 No exponer ninguna de estas variables en el frontend ni incluir valores reales
 en documentación, capturas, logs o comandos versionados.

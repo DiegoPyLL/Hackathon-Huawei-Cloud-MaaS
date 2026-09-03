@@ -1,5 +1,7 @@
 # Stack actual
 
+> Actualizado: 03-09-2026
+
 | Pieza | Tecnología | Razón |
 | --- | --- | --- |
 | Runtime | Python 3.12, biblioteca estándar | Arranque desde clon limpio y superficie mínima |
@@ -10,7 +12,15 @@
 | Almacén | Supabase vía PostgREST y `urllib` | Persiste la cola de aprobación sin añadir dependencias de runtime |
 | Frontend | HTML, CSS y JavaScript nativos | Sin build ni dependencias para la demo |
 | Evaluación | JSON + script Python | Casos versionados y ejecución local o live |
-| Empaquetado | Docker | Artefacto portable para elegir runtime cloud después |
+| Ejecución automática | GitHub Actions (`schedule` + `workflow_dispatch`) | Corrida desatendida sin infraestructura propia; el log queda como evidencia |
+| Ejecución manual | Script Python en `scripts/ejecutablesBase/` | Mismo código de corrida, disparado a mano para la demo |
+| Integración continua | GitHub Actions en cada push, en `mock` | Tests y evals sin gastar saldo ni exponer secretos |
+| Trazabilidad | Tabla `trazas` en Supabase, cronometrada por fase y origen | Atribuir la latencia a la inferencia, al almacén o al proceso |
+| Empaquetado | Docker, para ejecución local | Correr la corrida sin instalar Python; ya no es artefacto de producción |
+
+Detalle de la ejecución dual y la traza:
+[ADR-0006](decisions/0006-ejecucion-programada-y-manual.md) y
+[ADR-0007](decisions/0007-traza-de-corrida-por-fase.md).
 
 El endpoint, los modelos, las cuotas y los precios **no forman parte estable del
 stack**: son datos volátiles que se verifican antes de cada despliegue. Al

@@ -22,6 +22,8 @@ la decide.
 ```
 corridas ──┬─▶ incidentes ──▶ hallazgos ──▶ aprobaciones ──▶ bitacora_acciones
            │                                                        │
+           ├─▶ trazas (una fila por fase, con su origen)            │
+           │                                                        │
            └────────────────────────────────────────────────────────┘
                                                                     │
                         actúa sobre ────────────────────────────────┘
@@ -65,6 +67,7 @@ Una fila por ejecución del flujo.
 | `usage` | `jsonb` | Tokens de entrada y salida cuando el proveedor los reporta |
 | `estado` | `text` | `completada` · `parcial` · `fallida` |
 | `diferidos` | `jsonb` | Incidentes que el presupuesto dejó fuera, con su motivo |
+| `duracion_ms` | `int` | Tiempo total de la corrida, suma de `trazas.ms` |
 | `creada_en` | `timestamptz` | `now()` |
 
 `estado = 'parcial'` es un valor de primera clase, no un caso de error: una corrida
@@ -97,6 +100,28 @@ Un hallazgo por tarea despachada.
 `id` (`uuid`) · `corrida_id` · `incidente_id` · `especialista` · `estado`
 (`completado` · `fallido`) · `causa_raiz` · `confianza` · `evidencia` (`jsonb`) ·
 `descartado` (`jsonb`) · `viabilidad` · `error` (texto, solo si `estado = 'fallido'`).
+
+### `trazas`
+
+Una fila por fase medida de la corrida, para atribuir la latencia. Decisión y
+razonamiento completos en
+[ADR-0007](decisions/0007-traza-de-corrida-por-fase.md).
+
+| Columna | Tipo | Nota |
+| --- | --- | --- |
+| `id` | `uuid` | |
+| `corrida_id` | `uuid` | |
+| `fase` | `text` | `ingesta` · `triage` · `despacho` · `especialista` · `consolidacion` · `compuerta` · `persistencia` |
+| `origen` | `text` | `inferencia` · `almacen` · `local` — a qué se le cobra el tiempo |
+| `detalle` | `text` | `incidente_id` y especialista cuando aplica; ruta PostgREST cuando `origen = 'almacen'` |
+| `ms` | `int` | Duración medida |
+| `estado` | `text` | `ok` · `fallida` |
+| `iniciada_en` | `timestamptz` | |
+
+`detalle` nunca guarda cuerpos de prompt ni credenciales, solo identificadores
+y rutas — la misma disciplina que el resto del almacén. Las filas se acumulan
+en memoria durante la corrida y se insertan en una sola escritura al final: un
+insert por fase mediría la latencia de Supabase escribiendo en Supabase.
 
 ### `aprobaciones`
 
