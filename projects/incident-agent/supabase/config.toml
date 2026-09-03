@@ -1,0 +1,7 @@
+project_id = "incident-response-agent"
+
+[functions.recibir-email]
+verify_jwt = false
+
+[functions.generar-email]
+verify_jwt = true

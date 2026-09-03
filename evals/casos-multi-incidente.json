@@ -1,0 +1,91 @@
+[
+  {
+    "id": "tres-dominios-con-ruido",
+    "segment": "fan-out-completo",
+    "prompt": "Volcado consolidado de Nortia Retail (UTC, 3 canales). MONITOREO 09:41:07 alert=ALRT-9101 metric=db.lock_wait_seconds value=487 tabla=pedidos trx=TRX-4471 estado=activa | MONITOREO 09:41:09 alert=ALRT-9102 metric=api.p95_ms value=8140 endpoint=/pedidos | DEV-CHAT 09:43:22 <r.munoz> los pedidos de las ultimas 2 horas no aparecen en el backoffice, el insert responde ok pero el select no los trae | MONITOREO 09:52:14 alert=ALRT-9110 host=HOST-12 metric=cpu.pct value=97 sostenido=11min | MONITOREO 09:52:15 alert=ALRT-9111 host=HOST-12 metric=mem.available_mb value=118 | MONITOREO 09:53:02 host=HOST-12 proc=reporte-nocturno estado=running iniciado=09:41 | ACCESO 10:14:22 401 POST /login user=ana.soto ip=203.0.113.47 ua=curl/8.4 alert=ALRT-9130 | ACCESO 10:14:23 401 POST /login user=j.paredes ip=203.0.113.47 ua=curl/8.4 | ACCESO 10:14:25 401 POST /login user=m.rivas ip=203.0.113.47 ua=curl/8.4 | ACCESO 10:14:31 401 POST /login user=c.tapia ip=203.0.113.47 ua=curl/8.4 | ACCESO 10:14:38 200 POST /login user=c.tapia ip=203.0.113.47 ua=curl/8.4 sesion=SES-3312 | ACCESO 09:02:11 401 POST /login user=svc-cache ip=10.0.4.9 ua=nortia-agent/2.1 | ACCESO 09:07:11 401 POST /login user=svc-cache ip=10.0.4.9 ua=nortia-agent/2.1 | ACCESO 09:12:11 401 POST /login user=svc-cache ip=10.0.4.9 ua=nortia-agent/2.1 | MONITOREO 02:00:04 alert=ALRT-9088 metric=disk.used_pct value=91 host=HOST-04 job=backup-nocturno estado=completado 02:48 | Investiga este volcado.",
+    "esperado": {
+      "incidentes": 3,
+      "tareas": 3,
+      "llamadas": 5,
+      "ruteo": {
+        "INC-datos-pedidos": {
+          "tipo": "datos",
+          "especialistas": [
+            "dba"
+          ]
+        },
+        "INC-cpu-host12": {
+          "tipo": "capacidad",
+          "especialistas": [
+            "sysadmin"
+          ]
+        },
+        "INC-401-horizontal": {
+          "tipo": "acceso-identidad",
+          "especialistas": [
+            "secops"
+          ]
+        }
+      },
+      "descartados_esperados": [
+        "Los 401 de svc-cache: una sola identidad objetivo, cada 5 minutos exactos, agente propio. Credencial vencida, no fuerza bruta.",
+        "El disco al 91% de HOST-04: job de backup nocturno legitimo, ya completado a las 02:48."
+      ],
+      "nota": "Caso de referencia del recorrido manual documentado en flujo-agentes.md: 3 incidentes, 3 especialidades, 5 llamadas."
+    }
+  },
+  {
+    "id": "colapso-trafico-dos-especialistas",
+    "segment": "fan-out-mismo-incidente",
+    "prompt": "Volcado de Nortia Retail (UTC). MONITOREO 14:02:11 alert=ALRT-9201 host=HOST-07 metric=cpu.pct value=99 | MONITOREO 14:02:14 alert=ALRT-9202 host=HOST-07 metric=conn.active value=4096 limite=4096 | MONITOREO 14:02:19 alert=ALRT-9203 endpoint=/ status=503 ratio=1.0 | ACCESO 14:01:40 200 GET /buscar?q=zapatillas ip=198.51.100.22 ua=python-requests/2.31 | ACCESO 14:01:40 200 GET /buscar?q=zapatillas ip=198.51.100.23 ua=python-requests/2.31 | ACCESO 14:01:41 200 GET /buscar?q=zapatillas ip=198.51.100.22 ua=python-requests/2.31 | ACCESO 14:01:41 200 GET /buscar?q=zapatillas ip=198.51.100.24 ua=python-requests/2.31 | RED 14:01:38 flujo entrante 41200 req/min desde 198.51.100.0/24 (linea base: 900 req/min) | RED 14:02:20 flujo entrante 44100 req/min sostenido | DEV-CHAT 14:04:02 <p.leiva> se cayo la tienda entera, no responde nada | El servidor colapso por exceso de trafico y hay un pico de CPU. Investiga.",
+    "esperado": {
+      "incidentes": 1,
+      "tareas": 2,
+      "llamadas": 4,
+      "ruteo": {
+        "INC-colapso": {
+          "tipo": "indisponibilidad",
+          "especialistas": [
+            "sysadmin",
+            "secops"
+          ],
+          "motivo": "Regla 1 de la tabla de ruteo: la caida coincide con una rafaga desde un rango estrecho de IPs y agotamiento de conexiones."
+        }
+      },
+      "nota": "Un solo incidente que abre dos tareas en paralelo. SysAdmin mira agotamiento de conexiones; SecOps evalua si el trafico es un ataque. El caso es deliberadamente ambiguo: 41200 req/min desde un /24 con el mismo user-agent puede ser un ataque o un scraper mal configurado, y el volcado no trae el dato que lo decide."
+    }
+  },
+  {
+    "id": "incidente-simple-secuencial",
+    "segment": "camino-secuencial",
+    "prompt": "Volcado de Nortia Retail (UTC). MONITOREO 11:20:03 alert=ALRT-9301 proveedor=pasarela-pago metric=timeout_ratio value=0.82 ventana=5min | APP 11:20:05 ERROR POST /pagos upstream=pasarela-pago status=504 pedido=PED-88120 | APP 11:20:12 ERROR POST /pagos upstream=pasarela-pago status=504 pedido=PED-88121 | APP 11:20:31 ERROR POST /pagos upstream=pasarela-pago status=504 pedido=PED-88123 | MONITOREO 11:20:40 metric=api.p95_ms value=310 endpoint=/buscar (linea base 290) | MONITOREO 11:20:41 metric=cpu.pct value=22 host=HOST-07 | Los pagos estan fallando. Investiga.",
+    "esperado": {
+      "incidentes": 1,
+      "tareas": 1,
+      "llamadas": 3,
+      "ruteo": {
+        "INC-pasarela": {
+          "tipo": "integracion-terceros",
+          "especialistas": [
+            "sysadmin"
+          ]
+        }
+      },
+      "nota": "El camino minimo: sin fan-out, puramente secuencial. El resto del sistema responde normal (p95 y CPU en linea base), lo que descarta degradacion propia y aisla el fallo en el proveedor externo."
+    }
+  },
+  {
+    "id": "exceso-de-incidentes-presupuesto",
+    "segment": "tope-de-presupuesto",
+    "prompt": "Reporte semanal de pendientes de Nortia Retail (UTC). 1) MONITOREO 08:10 alert=ALRT-9401 disk.used_pct=78 host=HOST-03 tendencia=+2pct/semana | 2) MONITOREO 08:11 alert=ALRT-9402 cert TLS de api.nortia.ejemplo expira en 19 dias | 3) DEV-CHAT 08:15 <l.vera> el export a CSV pone la coma decimal como punto en 3 de 40 columnas | 4) MONITOREO 08:20 alert=ALRT-9403 webhook=partner-logistica reintentos=14 en 24h, todos exitosos al segundo intento | 5) SOPORTE 08:31 un cliente dice que el filtro de talla se resetea al volver atras en el navegador | 6) MONITOREO 08:40 alert=ALRT-9404 cola=emails profundidad=1200 (linea base 300), drenando | 7) SEGURIDAD 08:52 escaneo interno encontro la cadena AKIA_EJEMPLO_1234 en el repositorio interno herramientas-datos, commit de hace 6 dias, credencial CRED-2210 | 8) MONITOREO 09:02 alert=ALRT-9405 job=sincroniza-inventario duro 41min (linea base 12min), completado sin error | Revisa todo lo pendiente.",
+    "esperado": {
+      "incidentes_detectados": 8,
+      "incidentes_analizados": 6,
+      "diferidos": 2,
+      "tareas": 6,
+      "llamadas": 8,
+      "nota": "Ocho incidentes reales superan MAX_INCIDENTES=6. El punto 7 (credencial expuesta, tipo seguridad) debe quedar primero por severidad pese a ser el septimo de la lista. Los dos que no entran se declaran diferidos con su motivo en el reporte final; una corrida que los omita en silencio falla el caso. Con 6 tareas se alcanza exactamente MAX_LLAMADAS_POR_CORRIDA=8.",
+      "regla_probada": "Prioridad al recortar y reporte de diferidos."
+    }
+  }
+]

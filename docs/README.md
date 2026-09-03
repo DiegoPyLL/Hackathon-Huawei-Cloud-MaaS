@@ -7,10 +7,10 @@ Fuente de verdad del proyecto. Si una decisión no está aquí, no está tomada.
 | Carpeta | Responde a | Ejemplos |
 | --- | --- | --- |
 | [`product/`](product/) | Qué construimos y para quién | visión, alcance, usuarios, contenido |
-| [`design/`](design/) | Cómo se ve y se siente | design system, identidad, accesibilidad |
+| _(pendiente)_ `design/` | Cómo se ve y se siente | design system, identidad, accesibilidad |
 | [`architecture/`](architecture/) | Cómo está construido y por qué | stack, estructura, modelo de datos, ADRs |
 | [`development/`](development/) | Cómo se trabaja en él | entorno, convenciones, testing, flujo git |
-| [`performance-seo/`](performance-seo/) | Cómo se mide la calidad | presupuesto de rendimiento, checklist SEO, Core Web Vitals |
+| _(pendiente)_ `performance-seo/` | Cómo se mide la calidad | presupuesto de rendimiento, checklist SEO, Core Web Vitals |
 | [`operations/`](operations/) | Cómo vive en producción | despliegue, entornos, seguridad, incidentes |
 | [`assets/`](assets/) | Imágenes de la documentación | diagramas, capturas |
 

@@ -170,7 +170,13 @@ def restart_container() -> dict:
 
 def call_model(messages: list[dict]) -> dict:
     payload = json.dumps(
-        {"model": MODEL, "messages": messages, "tools": TOOLS, "tool_choice": "auto"}
+        {
+            "model": MODEL,
+            "messages": messages,
+            "tools": TOOLS,
+            "tool_choice": "auto",
+            "reasoning_effort": "max",
+        }
     ).encode("utf-8")
     request = urllib.request.Request(
         f"{BASE_URL}/chat/completions",

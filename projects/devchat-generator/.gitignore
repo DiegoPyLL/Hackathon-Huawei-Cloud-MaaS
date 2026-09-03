@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# artefactos del simulador en vivo — se regeneran cada vez que arranca el server
+channels/devchat/live_simulator/server.log
+channels/devchat/data/devchat_live_public.jsonl
+channels/devchat/data/devchat_live_groundtruth.jsonl
+
+.DS_Store
