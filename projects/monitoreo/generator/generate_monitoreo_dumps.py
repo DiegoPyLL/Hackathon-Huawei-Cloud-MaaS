@@ -821,8 +821,9 @@ def main(argv=None) -> None:
     if args.list_escenarios:
         cmd_list()
         return
-
-    rng = random.Random(args.seed)
+    
+    # seed fija
+    rng = random.Random(7)
 
     if args.solo_escenario:
         ids = [s.strip() for s in args.solo_escenario.split(",") if s.strip()]

@@ -43,6 +43,21 @@ class ServerTests(unittest.TestCase):
         self.assertIn('"type": "done"', body)
         self.assertIn('"mode": "mock"', body)
 
+    def test_incident_endpoint_emits_orchestration_events(self) -> None:
+        request = urllib.request.Request(
+            f"{self.base_url}/api/incidentes/run",
+            data=json.dumps({"canal": "monitoreo", "prompt": "MONITOREO cpu.pct value=99"}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request) as response:
+            body = response.read().decode()
+
+        self.assertIn('"type": "triage"', body)
+        self.assertIn('"type": "tarea"', body)
+        self.assertIn('"type": "hallazgo"', body)
+        self.assertIn('"type": "done"', body)
+
 
 if __name__ == "__main__":
     unittest.main()

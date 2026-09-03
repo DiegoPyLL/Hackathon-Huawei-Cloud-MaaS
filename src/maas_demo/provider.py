@@ -37,7 +37,26 @@ class MockProvider:
             (message["content"] for message in reversed(messages) if message["role"] == "user"),
             "",
         )
+        system_prompt = next(
+            (message["content"] for message in messages if message["role"] == "system"),
+            "",
+        )
         subject = " ".join(prompt.split())[:120]
+        role_source = system_prompt or prompt
+        role = next((line.strip() for line in role_source.splitlines() if line.strip().startswith("ROL:")), "")
+        if role == "ROL: triage":
+            answer = _mock_triage(prompt)
+        elif role in {"ROL: dba", "ROL: sysadmin", "ROL: secops"}:
+            answer = _mock_finding(prompt, role.removeprefix("ROL: ").strip())
+        elif role == "ROL: consolidador":
+            answer = _mock_report(prompt)
+        else:
+            answer = ""
+        if answer:
+            for chunk in _chunks(answer):
+                yield {"type": "delta", "delta": chunk}
+            yield {"type": "done", "mode": "mock", "model": self.model, "request_id": "mock-deterministic"}
+            return
         answer = (
             "Tipo de incidente\n"
             "Clasificación pendiente de confirmar contra los 8 tipos canónicos "
@@ -67,6 +86,49 @@ class MockProvider:
             "model": self.model,
             "request_id": "mock-deterministic",
         }
+
+
+def _mock_triage(prompt: str) -> str:
+    """Deterministic triage for local orchestration tests; it never reads groundtruth."""
+    text = prompt.lower()
+    incidents: list[dict[str, Any]] = []
+    def add(title: str, tipo: str, specialists: list[str], evidence: list[str], severity: str = "alta", attack: bool = False) -> None:
+        incidents.append({"id": f"INC-{len(incidents)+1:02d}", "titulo": title, "tipo": tipo,
+            "canal": "monitoreo", "severidad": severity, "ataque_activo": attack,
+            "evidencia": evidence[:5], "especialistas": specialists[:2],
+            "motivo_ruteo": "Ruteo determinado por la señal dominante y la tabla canónica."})
+    if "401" in text and ("varios usuarios" in text or text.count("user=") >= 3):
+        add("Ráfaga de accesos fallidos", "acceso-identidad", ["secops"], ["Patrón 401 contra múltiples identidades"], attack=True)
+    if "lock_wait" in text or "transaccion" in text and "bloque" in text:
+        add("Bloqueo del motor de datos", "datos", ["dba"], ["Señal de bloqueo o espera del motor"])
+    if "cpu.pct" in text or "mem.available" in text or "conn.active" in text:
+        add("Saturación de capacidad", "capacidad", ["sysadmin"], ["Métrica de capacidad por encima del límite"])
+    if "503" in text and ("trafico" in text or "req/min" in text):
+        add("Caída por agotamiento de conexiones", "indisponibilidad", ["sysadmin", "secops"], ["Respuestas 503 y tráfico anómalo"])
+    if "timeout" in text and ("proveedor" in text or "pasarela" in text or "upstream" in text):
+        add("Fallo de proveedor externo", "integracion-terceros", ["sysadmin"], ["Timeout concentrado en dependencia externa"])
+    if "169.254.169.254" in text or "credencial" in text and "repositorio" in text:
+        add("Actividad de seguridad sospechosa", "seguridad", ["secops"], ["Señal de acceso a metadata o credencial expuesta"], "critica")
+    if not incidents:
+        add("Incidente de monitoreo", "degradacion", ["sysadmin"], ["El volcado requiere investigación adicional"], "media")
+    return json.dumps({"version": "1", "incidentes": incidents, "descartados": []}, ensure_ascii=False)
+
+
+def _mock_finding(prompt: str, specialist: str) -> str:
+    match = next((line for line in prompt.splitlines() if line.startswith("INCIDENTE_JSON:")), "")
+    incident = json.loads(match.removeprefix("INCIDENTE_JSON:") or "{}")
+    return json.dumps({"version": "1", "incidente_id": incident.get("id", "INC-01"),
+        "especialista": specialist, "causa_raiz": "La evidencia disponible requiere confirmación operativa.",
+        "confianza": "media", "evidencia": incident.get("evidencia", [])[:2], "descartado": [],
+        "viabilidad": "requiere_mas_datos", "accion": None}, ensure_ascii=False)
+
+
+def _mock_report(prompt: str) -> str:
+    return ("Tipo de incidente\nIncidentes clasificados por el Orquestador.\n\n"
+            "Causa raíz probable\nLos especialistas entregaron hallazgos con evidencia acotada.\n\n"
+            "Evidencia\nSe citan las evidencias incluidas en los hallazgos.\n\n"
+            "Qué se descartó\nLas señales no incidentales aparecen explícitamente en el triage.\n\n"
+            "Acción correctiva\nLas acciones propuestas quedan sujetas a la compuerta de aprobación humana.")
 
 
 class MaaSProvider:
@@ -150,12 +212,12 @@ class MaaSProvider:
         }
 
 
-def build_provider(config: Any) -> ChatProvider:
+def build_provider(config: Any, model: str | None = None) -> ChatProvider:
     if config.mode == "mock":
-        return MockProvider(model=config.model)
+        return MockProvider(model=model or config.model)
     return MaaSProvider(
         api_key=config.api_key,
         base_url=config.base_url,
-        model=config.model,
+        model=model or config.model,
         timeout_seconds=config.timeout_seconds,
     )

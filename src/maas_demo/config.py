@@ -20,6 +20,11 @@ class Config:
     base_url: str
     model: str
     timeout_seconds: float = 45.0
+    modelo_triage: str | None = None
+    modelo_especialista: str | None = None
+    modelo_consolidacion: str | None = None
+    supabase_url: str | None = None
+    supabase_service_role_key: str | None = None
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -38,6 +43,14 @@ class Config:
         if not model:
             raise ConfigError("MAAS_MODEL no puede estar vacío.")
 
+        modelo_triage = os.getenv("MAAS_MODELO_TRIAGE", model).strip() or model
+        modelo_especialista = os.getenv("MAAS_MODELO_ESPECIALISTA", model).strip() or model
+        modelo_consolidacion = os.getenv("MAAS_MODELO_CONSOLIDACION", model).strip() or model
+        supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/") or None
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip() or None
+        if supabase_url and not supabase_url.startswith("https://"):
+            raise ConfigError("SUPABASE_URL debe usar HTTPS.")
+
         raw_timeout = os.getenv("MAAS_TIMEOUT_SECONDS", "45")
         try:
             timeout = float(raw_timeout)
@@ -52,4 +65,9 @@ class Config:
             base_url=base_url,
             model=model,
             timeout_seconds=timeout,
+            modelo_triage=modelo_triage,
+            modelo_especialista=modelo_especialista,
+            modelo_consolidacion=modelo_consolidacion,
+            supabase_url=supabase_url,
+            supabase_service_role_key=supabase_key,
         )
