@@ -25,5 +25,6 @@ Elección de framework, base de datos o proveedor · estrategia de renderizado (
 | [0005](0005-supabase-como-almacen.md) | Supabase como almacén, vía PostgREST | Aceptada |
 | [0006](0006-ejecucion-programada-y-manual.md) | Ejecución programada en GitHub Actions y script manual | Aceptada |
 | [0007](0007-traza-de-corrida-por-fase.md) | Traza de corrida por fase | Aceptada |
+| [0008](0008-rango-de-refuerzo-con-ejecucion-real.md) | Rango de refuerzo con ejecución real (tool-calling) | Aceptada |
 
 El 0001 sigue vigente en lo esencial —contrato `ChatProvider`, adaptadores separados, modo visible, sin fallback automático—. Lo que quedó atrás: el proveedor (0002), el límite de un solo agente (0003) y la ausencia de persistencia (0005). Cada ADR posterior nombra con precisión qué parte supera.

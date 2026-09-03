@@ -6,9 +6,13 @@
 !.claude/skills
 
 # Entorno y secretos
-#.env
-#.env.*
-#!.env.example
+.env
+.env.*
+!.env.example
+
+# Rango de refuerzo: transcripts y estado son spoilers del ataque a ciegas
+reinforcement-range/transcript-*.json
+reinforcement-range/state*.json
 
 # Codex
 # Solo se comparte la configuracion MCP del proyecto.
