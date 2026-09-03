@@ -1,0 +1,45 @@
+# Verificación en cada push. Implementa el ADR-0006.
+#
+# Sin secretos, deliberadamente: un PR desde un fork no debe poder tocar la clave
+# de Kostra ni la service_role de Supabase. La conexión real al almacén se
+# comprueba en verificar-supabase.yml, que sí los usa y no lo disparan los forks.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# SECURITY.md: restringir los permisos del workflow al mínimo.
+permissions:
+  contents: read
+
+jobs:
+  verificacion:
+    name: Tests y evaluación en mock
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # Acciones pineadas a SHA, no a tag: un tag es móvil (SECURITY.md).
+      # El submódulo .claude/skills no se clona: nada del código lo lee.
+      - name: Descargar el repositorio
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Preparar Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      # No hay pip install: el proyecto es stdlib pura y el Dockerfile
+      # tampoco instala nada.
+      - name: Suite de pruebas
+        run: python -m unittest discover -s tests -v
+
+      - name: Evaluación GenAI en mock
+        run: python scripts/ejecutablesBase/evaluar.py --mode mock
+
+      - name: Corrida completa con tests categorizados
+        run: python scripts/ejecutablesBase/ejecutar-corrida.py --mode mock --con-tests
+
+      - name: Autotest del generador de monitoreo
+        run: python projects/monitoreo/generator/generate_monitoreo_dumps.py --autotest

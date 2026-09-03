@@ -1,0 +1,38 @@
+# Comprueba la conexión real con Supabase. Separado de ci.yml a propósito:
+# este workflow sí usa secretos, y por eso nunca lo dispara un pull_request
+# (un fork podría leerlos). Frontera de confianza del ADR-0006.
+name: Verificar Supabase
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Minuto 17 y no :00 — GitHub descarta ejecuciones en los minutos de más
+    # carga. Diario, no más: la comprobación es barata pero no gratis.
+    - cron: '17 6 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  conexion:
+    name: Conexión al almacén
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Cinturón y tirantes: aunque el trigger ya excluye pull_request.
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Preparar Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      # Falla declarando si faltan los secretos; nunca los da por buenos.
+      - name: Verificar la conexión y contar filas
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/ejecutablesBase/ejecutar-corrida.py --verificar-almacen

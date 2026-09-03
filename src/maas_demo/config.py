@@ -20,6 +20,13 @@ class Config:
     base_url: str
     model: str
     timeout_seconds: float = 45.0
+    supabase_url: str | None = None
+    supabase_key: str | None = None
+
+    @property
+    def hay_almacen(self) -> bool:
+        """Solo con las dos variables se puede persistir; una sola no basta."""
+        return bool(self.supabase_url and self.supabase_key)
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -46,10 +53,18 @@ class Config:
         if not 1 <= timeout <= 300:
             raise ConfigError("MAAS_TIMEOUT_SECONDS debe estar entre 1 y 300.")
 
+        # La service_role ignora RLS: sobre HTTP plano quedaria expuesta en transito.
+        supabase_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/") or None
+        if supabase_url and not supabase_url.startswith("https://"):
+            raise ConfigError("SUPABASE_URL debe usar HTTPS.")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip() or None
+
         return cls(
             mode=mode,
             api_key=api_key,
             base_url=base_url,
             model=model,
             timeout_seconds=timeout,
+            supabase_url=supabase_url,
+            supabase_key=supabase_key,
         )
