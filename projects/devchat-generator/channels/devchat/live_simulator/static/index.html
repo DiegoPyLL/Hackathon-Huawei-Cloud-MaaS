@@ -148,6 +148,8 @@ const ROLE_COLORS = {
   dev: "#1164a3", sre: "#e01e5a", qa: "#9b51e0", lead: "#2eb67d", pm: "#e8a63d",
 };
 
+const API_TOKEN = "__API_TOKEN__"; // inyectado por el servidor en cada GET /
+
 let selectedChannel = null; // null = todos
 let allChannels = [];
 
@@ -227,8 +229,11 @@ function appendMessage(m) {
   if (nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
+const authHeaders = { "Authorization": `Bearer ${API_TOKEN}` };
+
 async function loadChannels() {
-  const res = await fetch("/api/channels");
+  const res = await fetch("/api/channels", { headers: authHeaders });
+  if (!res.ok) { console.error("no autorizado para /api/channels", res.status); return; }
   const data = await res.json();
   allChannels = data.channels;
   renderChannelList();
@@ -237,7 +242,8 @@ async function loadChannels() {
 async function loadHistory() {
   messagesEl.innerHTML = "";
   const url = selectedChannel ? `/api/history?limit=100&channel=${encodeURIComponent(selectedChannel)}` : "/api/history?limit=100";
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: authHeaders });
+  if (!res.ok) { console.error("no autorizado para /api/history", res.status); return; }
   const data = await res.json();
   if (data.messages.length === 0) {
     messagesEl.innerHTML = '<div id="empty-state">Esperando mensajes…</div>';
@@ -248,7 +254,7 @@ async function loadHistory() {
 
 function connectWS() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(API_TOKEN)}`);
   ws.onopen = () => {
     statusEl.classList.add("connected");
     statusTextEl.textContent = "en vivo";
@@ -268,7 +274,7 @@ function connectWS() {
 speedSelect.onchange = () => {
   fetch("/api/speed", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders },
     body: JSON.stringify({ mode: speedSelect.value }),
   });
 };

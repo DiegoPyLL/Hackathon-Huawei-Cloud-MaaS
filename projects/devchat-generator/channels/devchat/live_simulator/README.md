@@ -9,6 +9,27 @@ Reusa el vocabulario y la taxonomía de `channels/devchat/generator/`
 (mismos 8 tipos de incidente) — esto no reemplaza al generador batch, es un
 modo "en vivo" para demo.
 
+## Autenticación
+
+Ningún sistema de mensajería real deja sus endpoints abiertos — cuando esto
+se reemplace por Slack/Teams de verdad, el agente va a necesitar un token de
+bot para conectarse. Para simular esa misma restricción, `/api/history`,
+`/api/channels`, `/api/speed` y `/ws` exigen un token:
+
+- REST: header `Authorization: Bearer <token>`
+- WebSocket: query param `?token=<token>` (los navegadores no pueden mandar
+  headers custom en el handshake de WS, por eso va en la URL)
+
+El token sale de la variable de entorno `DEVCHAT_API_TOKEN`; si no se
+setea, usa el default de desarrollo `devchat-dev-token` (se imprime en la
+consola al arrancar el server). El HTML que sirve `/` inyecta el token real
+del server, así que el frontend siempre queda sincronizado sin tocar nada
+a mano.
+
+`/api/stats` queda deliberadamente sin proteger — es el endpoint de
+monitoreo/groundtruth para nosotros, no algo que un chat real expondría ni
+que el agente vaya a tocar.
+
 ## Dos salidas, separadas a propósito
 
 Todo mensaje que se genera tiene una versión "pública" y una "groundtruth".
