@@ -57,3 +57,64 @@ dd { margin: 5px 0 0; overflow: hidden; text-overflow: ellipsis; }
   .input-panel { border-right: 0; border-bottom: 1px solid var(--line); }
   .metrics { grid-template-columns: 1fr; }
 }
+
+h3 { margin: 0 0 12px; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); }
+.section-title { margin-top: 34px; }
+.count { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.07); color: #f5f7fa; }
+.block { margin: 0 0 28px; }
+.muted { color: var(--muted); font-size: 0.86rem; margin: 8px 0 0; }
+.error-text { color: #ff8b9c; margin: 6px 0 0; }
+
+.pipeline { list-style: none; display: grid; gap: 10px; margin: 0; padding: 0; }
+.pipeline li { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.9rem; }
+.pipeline .dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #3a4150; flex: none; }
+.pipeline li[data-state="activo"] { color: #f5f7fa; }
+.pipeline li[data-state="activo"] .dot { background: #ffd479; border-color: #ffd479; }
+.pipeline li[data-state="ok"] { color: #f5f7fa; }
+.pipeline li[data-state="ok"] .dot { background: #72e2a4; border-color: #72e2a4; }
+.live-log { min-height: 1.3em; margin: 14px 0 0; color: var(--muted); font-size: 0.84rem; }
+
+.chart { display: grid; gap: 6px; margin-bottom: 16px; }
+.chart-row { display: grid; grid-template-columns: 5.5rem 1fr 2rem; align-items: center; gap: 10px; font-size: 0.78rem; color: var(--muted); }
+.chart-track { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.chart-bar { height: 100%; border-radius: 999px; background: #596171; transition: width 0.25s ease; }
+.chart-bar[data-severity="critica"] { background: var(--red); }
+.chart-bar[data-severity="alta"] { background: #ff8b3d; }
+.chart-bar[data-severity="media"] { background: #ffd479; }
+.chart-bar[data-severity="baja"] { background: #72e2a4; }
+.chart-value { text-align: right; color: #f5f7fa; }
+
+.cards { list-style: none; display: grid; gap: 10px; margin: 0; padding: 0; }
+.card { padding: 14px; border: 1px solid var(--line); border-left: 3px solid #596171; border-radius: 12px; background: rgba(255, 255, 255, 0.02); }
+.card[data-severity="critica"] { border-left-color: var(--red); }
+.card[data-severity="alta"] { border-left-color: #ff8b3d; }
+.card[data-severity="media"] { border-left-color: #ffd479; }
+.card[data-severity="baja"] { border-left-color: #72e2a4; }
+.card[data-state="fallido"] { border-left-color: var(--red); }
+.card.discarded { color: var(--muted); font-size: 0.84rem; border-left-color: #3a4150; }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.tag { padding: 2px 9px; border: 1px solid var(--line); border-radius: 999px; font-size: 0.72rem; color: var(--muted); }
+.tag[data-kind="severidad"], .tag[data-kind="alerta"] { color: #ff8b9c; border-color: #6b2734; }
+.tag[data-kind="rol"] { color: #8fb8ff; border-color: #2b3d63; }
+.tag[data-kind="confianza"] { color: #ffd479; border-color: #705822; }
+.evidence { margin: 10px 0 0; padding-left: 18px; color: #cfd5df; font-size: 0.86rem; }
+.evidence li { margin: 3px 0; }
+
+.tasks { list-style: none; display: grid; gap: 8px; margin: 0; padding: 0; }
+.task { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 0.86rem; }
+.task-state { color: var(--muted); text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.08em; }
+.task[data-state="iniciada"] { border-color: #705822; }
+.task[data-state="iniciada"] .task-state { color: #ffd479; }
+.task[data-state="completado"] { border-color: #28784d; }
+.task[data-state="completado"] .task-state { color: #72e2a4; }
+.task[data-state="fallido"] { border-color: #6b2734; }
+.task[data-state="fallido"] .task-state { color: #ff8b9c; }
+
+.approval[data-state="pendiente"] { border-left-color: #ffd479; }
+.approval[data-state="aprobada"] { border-left-color: #72e2a4; }
+.approval[data-state="rechazada"] { border-left-color: var(--red); }
+.approval-state { display: inline-block; margin-top: 8px; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; }
+
+.metrics { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 780px) { .metrics { grid-template-columns: repeat(2, 1fr); } }

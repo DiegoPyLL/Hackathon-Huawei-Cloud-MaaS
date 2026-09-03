@@ -1,0 +1,94 @@
+# Corrida programada del ADR-0006, con la salida como alerta de code scanning
+# (ADR-0009). Repasa todos los logs de Supabase y publica los hallazgos en la
+# pestaña Security del repositorio.
+#
+# El horario pedido es 19:00 de Chile todo el año. GitHub solo entiende UTC y
+# Chile cambia de huso dos veces al año, así que se declaran los dos crons
+# posibles y un paso-guarda deja pasar únicamente el que corresponde al huso
+# vigente. Sin la guarda, media parte del año la corrida caería a las 18:00.
+name: Corrida programada
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 19:43 de Chile en UTC-3 (horario de verano)
+    - cron: '43 22 * * *'
+    # 19:43 de Chile en UTC-4 (horario de invierno)
+    - cron: '43 23 * * *'
+
+# SECURITY.md: permisos mínimos. `security-events: write` es el que exige
+# upload-sarif; no se concede nada más.
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  corrida:
+    name: Repaso de logs y publicación de hallazgos
+    runs-on: ubuntu-latest
+    # El job muere a las 6 h. Se corta antes desde el script, que sí puede
+    # declarar lo que quedó pendiente en vez de desaparecer a media corrida.
+    timeout-minutes: 350
+    # Nunca desde un fork: este job ve la clave de Kostra y la service_role.
+    if: github.event_name != 'pull_request'
+
+    steps:
+      # Pineadas a SHA, no a tag: un tag es móvil (SECURITY.md).
+      - name: Descargar el repositorio
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Preparar Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      # De los dos crons, solo corre el que cae a las 19 en Santiago. Se
+      # pregunta por la hora local en vez de razonar por meses: zoneinfo ya
+      # conoce las reglas de cambio de horario y no hay que mantenerlas aquí.
+      - name: Comprobar que en Chile son las 19
+        id: guarda
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          hora = datetime.now(ZoneInfo("America/Santiago")).hour
+          manual = os.environ["GITHUB_EVENT_NAME"] != "schedule"
+          corre = manual or hora == 19
+          print(f"correr={'true' if corre else 'false'}")
+          PY
+
+      - name: Repasar todos los logs de Supabase
+        if: steps.guarda.outputs.correr == 'true'
+        env:
+          MAAS_MODE: live
+          MAAS_API_KEY: ${{ secrets.MAAS_API_KEY }}
+          MAAS_BASE_URL: ${{ secrets.MAAS_BASE_URL }}
+          MAAS_MODEL: ${{ secrets.MAAS_MODEL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: >-
+          python scripts/ejecutablesBase/ejecutar-corrida.py
+          --desde-supabase
+          --presupuesto-minutos 330
+          --sarif evals/results/incidentes.sarif
+          --json-out evals/results/corrida-programada.json
+
+      # Sube el SARIF aunque la corrida haya sido parcial: los hallazgos que sí
+      # se obtuvieron son válidos, y el resumen del job declara que faltaron.
+      - name: Publicar los hallazgos en la pestaña Security
+        if: always() && steps.guarda.outputs.correr == 'true' && hashFiles('evals/results/incidentes.sarif') != ''
+        uses: github/codeql-action/upload-sarif@6f5948dfacef28e207b48d0905cf90c03365536d # v3
+        with:
+          sarif_file: evals/results/incidentes.sarif
+          category: incident-agent
+
+      - name: Guardar el resumen de la corrida
+        if: always() && steps.guarda.outputs.correr == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: corrida-programada
+          path: evals/results/
+          if-no-files-found: ignore
+          retention-days: 14
