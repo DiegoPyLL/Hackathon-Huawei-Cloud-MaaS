@@ -114,16 +114,13 @@ class ClaudeMcpConfigTests(unittest.TestCase):
             mock.patch.object(DEVKIT, "parse_args", return_value=arguments),
             mock.patch.object(DEVKIT, "check_node", return_value=("node", "v22.0.0")),
             mock.patch.object(DEVKIT, "executable", return_value="npx"),
-            mock.patch.object(
-                DEVKIT, "check_claude", return_value=("claude", "2.1.220")
-            ),
-            mock.patch.object(DEVKIT, "check_codex") as check_codex,
+            mock.patch.object(DEVKIT, "check_client", return_value=("claude", "2.1.220")) as check_client,
             mock.patch.object(DEVKIT, "update_claude_config", return_value=False),
             mock.patch.object(DEVKIT, "run") as run,
         ):
             self.assertEqual(DEVKIT.main(), 0)
 
-        check_codex.assert_not_called()
+        check_client.assert_called_once_with("claude")
         run.assert_called_once_with(["claude", "mcp", "list"], dry_run=False)
 
 
