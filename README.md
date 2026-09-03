@@ -55,6 +55,16 @@ python3 -m src.maas_demo
 
 Abrir <http://127.0.0.1:8080>.
 
+## Llegar y correr
+
+```bash
+./scripts/ejecutablesBase/iniciar-demo.sh
+```
+
+Levanta el panel (`mock` si no hay `.env` con `MAAS_MODE=live`, `live` si lo
+hay) y abre el navegador solo. `Ctrl+C` para detenerlo. En un file manager con
+soporte de ejecución, doble click también funciona.
+
 ## Demo en menos de dos minutos
 
 No requiere dependencias Python ni credenciales:
