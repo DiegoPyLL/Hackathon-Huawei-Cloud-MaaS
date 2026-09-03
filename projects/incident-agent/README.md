@@ -54,6 +54,8 @@ incident-agent/
     └── functions/
         └── recibir-email/
             └── index.ts                   <- Edge Function que recibe el webhook de Postmark
+                └── generar-email/
+                        └── index.ts                   <- Genera y guarda borradores de respuesta
 ```
 
 ## Estado actual (lo ya hecho)
@@ -65,6 +67,7 @@ incident-agent/
 - [x] Supabase CLI instalada via Scoop, login hecho
 - [x] Schema de base de datos definido (`schema/schema_incidentes.sql`)
 - [x] Codigo de la Edge Function `recibir-email` escrito
+- [x] Generacion de borradores de correo a partir de un incidente
 - [ ] Proyecto vinculado con `supabase link` (project-ref: `vrdkupzjrgtlgiexhpie`)
 - [ ] Secrets configurados (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
 - [ ] Edge Function desplegada
@@ -72,6 +75,27 @@ incident-agent/
 - [ ] Prueba de punta a punta (correo -> Gmail -> Postmark -> Supabase)
 - [ ] Logica de clasificacion automatica (tipo_problema, severidad) desde el texto del correo
 - [ ] Diseño del Incident Response Agent en si (motor de razonamiento + herramientas)
+
+### Generar un correo
+
+La función `generar-email` crea un borrador en `emails_salientes`. Usa como
+destinatario el remitente del correo de origen del incidente, aunque se puede
+indicar otro destinatario explícitamente.
+
+```powershell
+$body = @{ incidente_id = "<uuid-del-incidente>" } | ConvertTo-Json
+Invoke-RestMethod `
+        -Method Post `
+        -Uri "https://<project-ref>.supabase.co/functions/v1/generar-email" `
+        -Headers @{ Authorization = "Bearer <service-role-key>" } `
+        -ContentType "application/json" `
+        -Body $body
+```
+
+La respuesta contiene `id`, `destinatario`, `asunto`, `cuerpo` y `estado` del
+borrador. La función no envía el correo: un proceso de salida podrá tomar los
+registros con estado `borrador`, entregarlos al proveedor y actualizar
+`estado`, `proveedor_id` y `enviado_en`.
 
 ## Como continuar (pasos pendientes)
 
