@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import json
 import os
@@ -37,6 +38,47 @@ async def consultar_bus():
         if estado.get(inc["panel_semaforo"]) != "OUTAGE":
             estado[inc["panel_semaforo"]] = inc["estado_servicio"]
     return estado, incidentes
+
+
+def registrar_incidentes(incidentes):
+    """Registra en el log cada incidente nuevo, una sola vez."""
+    for inc in incidentes:
+        if inc["incidente_id"] in incidentes_ya_registrados:
+            continue
+        incidentes_ya_registrados.add(inc["incidente_id"])
+        logger.error("Incidencia detectada", extra={
+            "audit": {
+                "event": "SERVICE_DEGRADED",
+                "incidente_id": inc["incidente_id"],
+                "service": inc["panel_semaforo"],
+                "servicio_afectado": inc["servicio"],
+                "status": inc["estado_servicio"],
+                "severidad": inc["severidad"],
+            }
+        })
+        # Las líneas de alerta entran al log como evidencia citable por el agente.
+        for linea in inc["lineas"]:
+            logger.error(linea["texto"], extra={
+                "audit": {
+                    "event": "INCIDENT_EVIDENCE",
+                    "incidente_id": inc["incidente_id"],
+                    "servicio_afectado": inc["servicio"],
+                }
+            })
+
+
+@app.on_event("startup")
+async def vigilar_bus():
+    """Un sistema de logs real no espera a que alguien abra el dashboard: vigila
+    solo. Sin esto, la evidencia solo existía si el navegador estaba pidiendo
+    métricas, y el agente encontraba el canal vacío."""
+    async def bucle():
+        while True:
+            _, incidentes = await consultar_bus()
+            registrar_incidentes(incidentes)
+            await asyncio.sleep(5)
+
+    asyncio.create_task(bucle())
 
 # Formateador de logs estructurados en JSON
 class JsonFormatter(logging.Formatter):
@@ -136,32 +178,9 @@ async def get_metrics():
         }
     }
 
-    # Un incidente del bus se registra una sola vez, cuando el panel lo ve por
-    # primera vez. Sin esto el polling de 2s repetiría el mismo log sin parar.
-    for inc in incidentes:
-        if inc["incidente_id"] in incidentes_ya_registrados:
-            continue
-        incidentes_ya_registrados.add(inc["incidente_id"])
-        logger.error("Incidencia detectada", extra={
-            "audit": {
-                "event": "SERVICE_DEGRADED",
-                "incidente_id": inc["incidente_id"],
-                "service": inc["panel_semaforo"],
-                "servicio_afectado": inc["servicio"],
-                "status": inc["estado_servicio"],
-                "severidad": inc["severidad"],
-            }
-        })
-        # Las líneas de alerta del incidente entran al log como evidencia real,
-        # que es lo que el agente va a citar.
-        for linea in inc["lineas"]:
-            logger.error(linea["texto"], extra={
-                "audit": {
-                    "event": "INCIDENT_EVIDENCE",
-                    "incidente_id": inc["incidente_id"],
-                    "servicio_afectado": inc["servicio"],
-                }
-            })
+    # El registro lo hace el poller de fondo, que corre haya o no navegador
+    # abierto; acá solo se refleja el estado.
+    registrar_incidentes(incidentes)
 
     if not incidentes:
         logger.info("Polling de métricas completado exitosamente", extra={

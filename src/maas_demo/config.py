@@ -20,6 +20,9 @@ class Config:
     base_url: str
     model: str
     timeout_seconds: float = 45.0
+    modelo_triage: str | None = None
+    modelo_especialista: str | None = None
+    modelo_consolidacion: str | None = None
     supabase_url: str | None = None
     supabase_key: str | None = None
 
@@ -45,6 +48,10 @@ class Config:
         if not model:
             raise ConfigError("MAAS_MODEL no puede estar vacío.")
 
+        modelo_triage = os.getenv("MAAS_MODELO_TRIAGE", model).strip() or model
+        modelo_especialista = os.getenv("MAAS_MODELO_ESPECIALISTA", model).strip() or model
+        modelo_consolidacion = os.getenv("MAAS_MODELO_CONSOLIDACION", model).strip() or model
+
         raw_timeout = os.getenv("MAAS_TIMEOUT_SECONDS", "45")
         try:
             timeout = float(raw_timeout)
@@ -65,6 +72,9 @@ class Config:
             base_url=base_url,
             model=model,
             timeout_seconds=timeout,
+            modelo_triage=modelo_triage,
+            modelo_especialista=modelo_especialista,
+            modelo_consolidacion=modelo_consolidacion,
             supabase_url=supabase_url,
             supabase_key=supabase_key,
         )

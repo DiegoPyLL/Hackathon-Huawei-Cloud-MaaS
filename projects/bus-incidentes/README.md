@@ -90,13 +90,17 @@ red, y después se puntúa contra la verdad.
 
 ## El camino de vuelta
 
-`projects/agente-puente/` recoge las tres versiones del incidente y se las pasa
-al agente (`src/maas_demo`) para que las correlacione:
+`projects/agente-puente/` recoge las tres versiones del incidente y dispara una
+corrida del flujo multiagente (`src/maas_demo/orchestrator.py`): triage →
+despacho → especialistas → consolidación, con validación de contratos y
+compuerta de aprobación.
 
 ```powershell
 $env:MAAS_MODE="mock"; .venv\Scripts\python.exe -m src.maas_demo   # agente
 .venv\Scripts\python.exe projects\agente-puente\puente.py          # corrida
 ```
+
+Cada corrida cierra contrastando lo detectado contra `GET /api/verdad`.
 
 ## Pendiente
 

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Incident Triage Agent — Live Demo</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #1a1d27; --border: #2a2d3a;
+    --text: #e4e4e7; --text-dim: #71717a;
+    --accent: #6366f1; --green: #22c55e; --red: #ef4444;
+    --orange: #f97316; --yellow: #eab308; --cyan: #06b6d4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); height: 100vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 10px 20px; display: flex; align-items: center; justify-content: space-between;
+  }
+  header h1 { font-size: 16px; }
+  .controls { display: flex; gap: 10px; align-items: center; }
+  .btn {
+    background: var(--accent); color: #fff; border: none;
+    padding: 7px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  .btn:disabled { opacity: 0.5; }
+  .btn.off { background: var(--border); }
+  select { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 13px; }
+  .top-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1px;
+    background: var(--border); flex: 1; min-height: 0;
+  }
+  .panel { background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+  .panel-header {
+    padding: 8px 12px; border-bottom: 1px solid var(--border);
+    font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;
+  }
+  .panel-header .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .panel-body { flex: 1; overflow-y: auto; padding: 8px; }
+  .agent-row {
+    display: flex; flex-direction: column; flex: 0 0 280px;
+    background: var(--panel); border-top: 1px solid var(--border);
+  }
+  .agent-body { flex: 1; overflow-y: auto; padding: 8px; }
+  .main-bottom { display: flex; flex: 1; min-height: 0; }
+  .stats-bar {
+    flex: 0 0 240px; background: var(--panel); border-right: 1px solid var(--border);
+    overflow-y: auto; padding: 12px;
+  }
+  .stats-bar h3 { font-size: 12px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px; }
+  .stat-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 6px; }
+  .stat-card .label { font-size: 10px; color: var(--text-dim); }
+  .stat-card .value { font-size: 20px; font-weight: 700; }
+  .stat-chip { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px; font-size: 11px; display: inline-flex; gap: 3px; margin: 2px; }
+  .stat-chip .count { font-weight: 700; color: var(--accent); }
+  .chip-row { display: flex; flex-wrap: wrap; margin-bottom: 8px; }
+
+  /* Dev chat */
+  .dc-msg { padding: 3px 0; font-size: 12px; line-height: 1.4; }
+  .dc-msg .autor { font-weight: 700; color: var(--cyan); }
+  .dc-msg .time { color: var(--text-dim); font-size: 10px; }
+  .dc-msg .canal { color: var(--text-dim); font-size: 10px; background: var(--bg); padding: 1px 4px; border-radius: 2px; }
+  .dc-msg .texto { color: var(--text); }
+
+  /* Email */
+  .em-card { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 6px; }
+  .em-card .subject { font-size: 12px; font-weight: 600; }
+  .em-card .meta { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .em-card .prio { display: inline-block; padding: 1px 5px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+  .em-card .prio.P1 { background: var(--red); color: #fff; }
+  .em-card .prio.P2 { background: var(--orange); color: #fff; }
+  .em-card .prio.P3 { background: var(--yellow); color: #000; }
+  .em-card .prio.P4 { background: var(--border); color: var(--text); }
+
+  /* Monitoring log */
+  .mon-card { padding: 6px 8px; border-radius: 4px; margin-bottom: 4px; font-size: 12px; }
+  .mon-card.firing { background: rgba(239,68,68,0.15); border-left: 3px solid var(--red); }
+  .mon-card.resolved { background: rgba(34,197,94,0.1); border-left: 3px solid var(--green); }
+  .mon-card .alert-name { font-weight: 700; }
+  .mon-card .state { font-size: 10px; font-weight: 700; text-transform: uppercase; }
+  .mon-card .state.firing { color: var(--red); }
+  .mon-card .state.resolved { color: var(--green); }
+  .mon-card .desc { color: var(--text-dim); font-size: 11px; margin-top: 2px; }
+
+  /* Dashboard */
+  .dash-svc { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; margin-bottom: 6px; }
+  .dash-svc .name { font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; }
+  .dash-svc .health { font-size: 10px; padding: 1px 5px; border-radius: 3px; }
+  .dash-svc .health.healthy { background: rgba(34,197,94,0.2); color: var(--green); }
+  .dash-svc .health.unhealthy { background: rgba(239,68,68,0.2); color: var(--red); }
+  .gauge { height: 4px; background: var(--border); border-radius: 2px; margin-top: 4px; overflow: hidden; }
+  .gauge-fill { height: 100%; border-radius: 2px; }
+  .gauge-row { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+  /* Agent */
+  .ag-card { background: var(--bg); border: 1px solid var(--border); border-left: 4px solid var(--text-dim); border-radius: 6px; padding: 10px; margin-bottom: 8px; animation: slidein 0.3s; }
+  @keyframes slidein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .ag-card.critica { border-left-color: var(--red); }
+  .ag-card.alta { border-left-color: var(--orange); }
+  .ag-card.media { border-left-color: var(--yellow); }
+  .ag-card.baja { border-left-color: var(--green); }
+  .ag-card.duplicate { opacity: 0.45; }
+  .ag-card.no-incidente { border-left-color: var(--text-dim); }
+  .ag-header { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
+  .ag-badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; }
+  .ag-badge.critica { background: var(--red); color: #fff; }
+  .ag-badge.alta { background: var(--orange); color: #fff; }
+  .ag-badge.media { background: var(--yellow); color: #000; }
+  .ag-badge.baja { background: var(--green); color: #fff; }
+  .ag-badge.n-a { background: var(--border); color: var(--text-dim); }
+  .ag-badge.canal { background: var(--border); color: var(--text); }
+  .ag-badge.cat { background: var(--bg); color: var(--accent); border: 1px solid var(--border); }
+  .ag-badge.dup { background: var(--orange); color: #fff; }
+  .ag-resumen { font-size: 12px; line-height: 1.4; margin-bottom: 4px; }
+  .ag-causa { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+  .ag-actions { font-size: 11px; margin-bottom: 4px; }
+  .ag-actions li { margin-left: 12px; }
+  .ag-previos { background: var(--panel); border-radius: 4px; padding: 6px; font-size: 11px; margin-bottom: 4px; }
+  .ag-previos .title { color: var(--text-dim); font-size: 10px; margin-bottom: 2px; }
+  .ag-previo { padding: 2px 0; border-bottom: 1px solid var(--border); }
+  .ag-previo:last-child { border-bottom: none; }
+  .ag-previo .ref { color: var(--accent); font-weight: 600; }
+  .ag-footer { display: flex; gap: 8px; font-size: 10px; color: var(--text-dim); }
+  .ag-footer .conf { color: var(--accent); }
+  .ag-processing { font-size: 11px; color: var(--yellow); padding: 4px 0; animation: pulse 1s infinite; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Incident Triage Agent — Live Demo</h1>
+    <div class="controls">
+      <select id="speed-select">
+        <option value="lento">Lento</option>
+        <option value="normal" selected>Normal</option>
+        <option value="rapido">Rápido</option>
+      </select>
+      <button class="btn off" id="agent-btn">Agente: OFF</button>
+    </div>
+  </header>
+  <div class="top-row">
+    <div class="panel">
+      <div class="panel-header"><span class="dot"></span> Dev Chat</div>
+      <div class="panel-body" id="devchat-panel"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><span class="dot"></span> Email</div>
+      <div class="panel-body" id="email-panel"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><span class="dot"></span> Monitoring Log</div>
+      <div class="panel-body" id="monlog-panel"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><span class="dot"></span> Dashboard</div>
+      <div class="panel-body" id="dash-panel"></div>
+    </div>
+  </div>
+  <div class="main-bottom">
+    <div class="stats-bar">
+      <h3>Estadísticas</h3>
+      <div class="stat-card"><div class="label">Señales procesadas</div><div class="value" id="st-total">0</div></div>
+      <div class="stat-card"><div class="label">Incidentes reales</div><div class="value" id="st-reales">0</div></div>
+      <div class="stat-card"><div class="label">Duplicados</div><div class="value" id="st-dup">0</div></div>
+      <div class="stat-card"><div class="label">No incidentes</div><div class="value" id="st-noi">0</div></div>
+      <h3>Por categoría</h3>
+      <div class="chip-row" id="st-cat"></div>
+      <h3>Por severidad</h3>
+      <div class="chip-row" id="st-sev"></div>
+      <h3>Por canal</h3>
+      <div class="chip-row" id="st-canal"></div>
+    </div>
+    <div class="agent-row">
+      <div class="panel-header"><span class="dot"></span> Agent — Incidentes Consolidados</div>
+      <div class="agent-body" id="agent-panel"></div>
+    </div>
+  </div>
+
+<script>
+const $ = id => document.getElementById(id);
+const agentBtn = $("agent-btn");
+const speedSelect = $("speed-select");
+let agentEnabled = false;
+
+function scrollBottom(el) { el.scrollTop = el.scrollHeight; }
+
+function addDevchat(m) {
+  const p = $("devchat-panel");
+  const div = document.createElement("div");
+  div.className = "dc-msg";
+  div.innerHTML = `<span class="time">${m.timestamp.slice(11,16)}</span> <span class="canal">${m.canal}</span> <span class="autor">@${m.autor}</span>: <span class="texto">${m.texto}</span>`;
+  p.appendChild(div);
+  if (p.children.length > 80) p.removeChild(p.firstChild);
+  scrollBottom(p);
+}
+
+function addEmail(m) {
+  const p = $("email-panel");
+  const div = document.createElement("div");
+  div.className = "em-card";
+  div.innerHTML = `<div class="subject">${m.subject}</div><div class="meta"><span class="prio ${m.prioridad_declarada}">${m.prioridad_declarada}</span> ${m.remitente} · ${m.timestamp.slice(11,16)}</div>`;
+  p.appendChild(div);
+  if (p.children.length > 40) p.removeChild(p.firstChild);
+  scrollBottom(p);
+}
+
+function addMonLog(m) {
+  const p = $("monlog-panel");
+  const div = document.createElement("div");
+  div.className = `mon-card ${m.alert_state}`;
+  div.innerHTML = `<span class="alert-name">${m.alert_name}</span> on ${m.servicio_afectado || '-'} <span class="state ${m.alert_state}">${m.alert_state}</span><div class="desc">${m.description}</div>`;
+  p.appendChild(div);
+  if (p.children.length > 40) p.removeChild(p.firstChild);
+  scrollBottom(p);
+}
+
+function updateDashboard(metrics) {
+  const p = $("dash-panel");
+  p.innerHTML = "";
+  for (const [svc, data] of Object.entries(metrics)) {
+    const div = document.createElement("div");
+    div.className = "dash-svc";
+    const latPct = Math.min(100, data.latency / 4000 * 100);
+    const errPct = Math.min(100, data.error_rate * 100);
+    const diskPct = data.disk;
+    const latColor = data.latency > 1000 ? "var(--red)" : data.latency > 500 ? "var(--orange)" : "var(--green)";
+    const errColor = data.error_rate > 0.05 ? "var(--red)" : data.error_rate > 0.02 ? "var(--orange)" : "var(--green)";
+    const diskColor = data.disk > 80 ? "var(--red)" : data.disk > 60 ? "var(--orange)" : "var(--green)";
+    div.innerHTML = `
+      <div class="name">${svc} <span class="health ${data.health}">${data.health}</span></div>
+      <div class="gauge-row"><span>latency</span><span>${data.latency}ms</span></div>
+      <div class="gauge"><div class="gauge-fill" style="width:${latPct}%;background:${latColor}"></div></div>
+      <div class="gauge-row"><span>errors</span><span>${(data.error_rate*100).toFixed(1)}%</span></div>
+      <div class="gauge"><div class="gauge-fill" style="width:${errPct}%;background:${errColor}"></div></div>
+      <div class="gauge-row"><span>disk</span><span>${data.disk}%</span></div>
+      <div class="gauge"><div class="gauge-fill" style="width:${diskPct}%;background:${diskColor}"></div></div>
+    `;
+    p.appendChild(div);
+  }
+}
+
+function addAgentProcessing(m) {
+  const p = $("agent-panel");
+  const div = document.createElement("div");
+  div.className = "ag-processing";
+  div.id = `proc-${m.id_externo}`;
+  div.textContent = `Procesando ${m.canal}: ${m.id_externo}...`;
+  p.appendChild(div);
+  scrollBottom(p);
+}
+
+function removeAgentProcessing(id) {
+  const el = document.getElementById(`proc-${id}`);
+  if (el) el.remove();
+}
+
+function renderIncidente(inc) {
+  const p = $("agent-panel");
+  const sev = inc.severidad || "n/a";
+  const isDup = inc.duplicado_de ? " duplicate" : "";
+  const isInc = inc.es_incidente ? "" : " no-incidente";
+  const div = document.createElement("div");
+  div.className = `ag-card ${sev}${isDup}${isInc}`;
+  let html = `<div class="ag-header">`;
+  html += `<span class="ag-badge canal">${inc.canal_origen}</span>`;
+  html += `<span class="ag-badge cat">${inc.categoria}</span>`;
+  if (inc.es_incidente) html += `<span class="ag-badge ${sev}">${sev}</span>`;
+  if (inc.duplicado_de) html += `<span class="ag-badge dup">dup de ${inc.duplicado_de}</span>`;
+  if (inc.servicio_afectado) html += `<span class="ag-badge canal">${inc.servicio_afectado}</span>`;
+  html += `</div>`;
+  html += `<div class="ag-resumen">${inc.resumen}</div>`;
+  if (inc.causa_raiz_probable) html += `<div class="ag-causa"><strong>Causa:</strong> ${inc.causa_raiz_probable}</div>`;
+  if (inc.acciones_recomendadas && inc.acciones_recomendadas.length > 0) {
+    html += `<div class="ag-actions"><ul>`;
+    for (const a of inc.acciones_recomendadas) html += `<li>${a}</li>`;
+    html += `</ul></div>`;
+  }
+  if (inc.incidentes_previos_similares && inc.incidentes_previos_similares.length > 0) {
+    html += `<div class="ag-previos"><div class="title">Incidentes previos similares:</div>`;
+    for (const p2 of inc.incidentes_previos_similares) {
+      html += `<div class="ag-previo"><span class="ref">${p2.id}</span> (${p2.score}) — ${p2.resumen} → <em>${p2.solucion}</em></div>`;
+    }
+    html += `</div>`;
+  }
+  html += `<div class="ag-footer"><span>${inc.id_externo}</span>`;
+  if (inc.dueño_sugerido) html += `<span>dueño: ${inc.dueño_sugerido}</span>`;
+  html += `<span class="conf">conf: ${(inc.confianza*100).toFixed(0)}%</span></div>`;
+  div.innerHTML = html;
+  p.appendChild(div);
+  if (p.children.length > 60) p.removeChild(p.firstChild);
+  scrollBottom(p);
+}
+
+function updateStats(stats) {
+  $("st-total").textContent = stats.total_senales ?? 0;
+  $("st-reales").textContent = stats.incidentes_reales ?? 0;
+  $("st-dup").textContent = stats.duplicados_detectados ?? 0;
+  $("st-noi").textContent = stats.no_incidentes ?? 0;
+  const catEl = $("st-cat"); catEl.innerHTML = "";
+  if (stats.por_categoria) for (const [k,v] of Object.entries(stats.por_categoria)) catEl.innerHTML += `<div class="stat-chip">${k} <span class="count">${v}</span></div>`;
+  const sevEl = $("st-sev"); sevEl.innerHTML = "";
+  if (stats.por_severidad) for (const [k,v] of Object.entries(stats.por_severidad)) sevEl.innerHTML += `<div class="stat-chip">${k} <span class="count">${v}</span></div>`;
+  const canalEl = $("st-canal"); canalEl.innerHTML = "";
+  if (stats.por_canal) for (const [k,v] of Object.entries(stats.por_canal)) canalEl.innerHTML += `<div class="stat-chip">${k} <span class="count">${v}</span></div>`;
+}
+
+function connectWS() {
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onmessage = (evt) => {
+    const m = JSON.parse(evt.data);
+    switch (m.type) {
+      case "devchat": addDevchat(m); break;
+      case "email": addEmail(m); break;
+      case "monitoring": addMonLog(m); break;
+      case "dashboard": updateDashboard(m.metrics); break;
+      case "agent_start": addAgentProcessing(m); break;
+      case "agent_result":
+        removeAgentProcessing(m.incidente.id_externo);
+        $("agent-panel").innerHTML = "";
+        for (const inc of m.all_incidentes) renderIncidente(inc);
+        updateStats(m.stats);
+        break;
+      case "agent_error":
+        removeAgentProcessing(m.id_externo);
+        break;
+      case "agent_status":
+        agentEnabled = m.enabled;
+        agentBtn.textContent = `Agente: ${agentEnabled ? "ON" : "OFF"}`;
+        agentBtn.classList.toggle("off", !agentEnabled);
+        break;
+      case "speed":
+        speedSelect.value = m.mode;
+        break;
+    }
+  };
+  ws.onclose = () => setTimeout(connectWS, 1500);
+}
+
+agentBtn.onclick = async () => {
+  await fetch("/api/agent/toggle", { method: "POST" });
+};
+speedSelect.onchange = async () => {
+  await fetch("/api/speed", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({mode: speedSelect.value}) });
+};
+
+connectWS();
+</script>
+</body>
+</html>

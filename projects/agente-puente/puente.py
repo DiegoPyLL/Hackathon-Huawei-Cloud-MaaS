@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -33,9 +34,9 @@ DEVCHAT_TOKEN = os.environ.get("DEVCHAT_API_TOKEN", "devchat-dev-token")
 METRICAS_URL = os.environ.get("METRICAS_URL", "http://localhost:8028")
 AGENTE_URL = os.environ.get("AGENTE_URL", "http://localhost:8080")
 
-# Limites que impone el agente (src/maas_demo/service.py).
-MAX_MENSAJES = 20
-MAX_CHARS_MENSAJE = 4_000
+# El servidor del agente rechaza peticiones sobre 64 KiB (src/maas_demo/server.py);
+# se deja margen para el resto del cuerpo JSON.
+MAX_BYTES_VOLCADO = 56 * 1024
 
 # El volcado son datos a analizar, nunca instrucciones. La clausula va explicita
 # porque el texto viene de un chat donde cualquiera escribe lo que quiera.
@@ -101,86 +102,87 @@ def armar_volcado(canales: dict) -> str:
     return "\n".join(partes)
 
 
-def armar_mensajes(canales: dict) -> list[dict]:
-    """El agente acepta como maximo 20 mensajes de 4.000 caracteres cada uno, asi
-    que el volcado va troceado por canal en vez de como un bloque unico."""
-    mensajes = [{"role": "user", "content": PREFACIO}]
+def preguntar_al_agente(volcado: str) -> dict:
+    """Dispara una corrida del flujo multiagente (fases triage -> despacho ->
+    especialistas -> consolidacion) y recoge sus eventos SSE."""
+    if len(volcado.encode()) > MAX_BYTES_VOLCADO:
+        # Se recorta declarando, nunca en silencio.
+        recorte = volcado.encode()[:MAX_BYTES_VOLCADO].decode(errors="ignore")
+        volcado = recorte + "\n(volcado truncado por limite de la corrida)"
 
-    for canal, lineas in canales.items():
-        if lineas is None:
-            mensajes.append({"role": "user",
-                             "content": f"=== CANAL: {canal} ===\n(no disponible en esta corrida)"})
-            continue
-        if not lineas:
-            mensajes.append({"role": "user", "content": f"=== CANAL: {canal} ===\n(sin señal)"})
-            continue
-
-        bloque, tamano, parte = [], 0, 1
-        for linea in lineas:
-            if tamano + len(linea) + 1 > MAX_CHARS_MENSAJE - 120:
-                mensajes.append({"role": "user",
-                                 "content": f"=== CANAL: {canal} (parte {parte}) ===\n" + "\n".join(bloque)})
-                bloque, tamano, parte = [], 0, parte + 1
-            bloque.append(linea)
-            tamano += len(linea) + 1
-        if bloque:
-            sufijo = f" (parte {parte})" if parte > 1 else ""
-            mensajes.append({"role": "user",
-                             "content": f"=== CANAL: {canal}{sufijo} ===\n" + "\n".join(bloque)})
-
-    mensajes.append({"role": "user",
-                     "content": "Analiza el volcado anterior y entrega el triage."})
-
-    # Si no entra, se recorta por el medio y se declara: nunca en silencio.
-    if len(mensajes) > MAX_MENSAJES:
-        recortados = len(mensajes) - MAX_MENSAJES + 1
-        mensajes = mensajes[:MAX_MENSAJES - 2] + [
-            {"role": "user", "content": f"(se omitieron {recortados} bloques de señal por limite de la corrida)"},
-            mensajes[-1],
-        ]
-    return mensajes
-
-
-def preguntar_al_agente(canales: dict) -> dict:
-    body = json.dumps({"messages": armar_mensajes(canales)}).encode()
+    body = json.dumps({
+        "id": f"puente-{int(time.time())}",
+        "canal": "monitoreo",
+        "prompt": volcado,
+    }).encode()
     req = urllib.request.Request(
-        f"{AGENTE_URL}/api/chat/stream", data=body,
+        f"{AGENTE_URL}/api/incidentes/run", data=body,
         headers={"Content-Type": "application/json"},
     )
-    texto, meta = [], {}
+
+    resultado = {"triage": None, "hallazgos": [], "aprobaciones": [],
+                 "reporte": "", "meta": {}, "error": None}
+    texto = []
     try:
-        with urllib.request.urlopen(req, timeout=120) as res:
+        with urllib.request.urlopen(req, timeout=180) as res:
             for raw in res:
                 linea = raw.decode("utf-8").strip()
                 if not linea.startswith("data:"):
                     continue
                 evento = json.loads(linea[5:].strip())
-                if evento.get("type") == "delta":
+                tipo = evento.get("type")
+                if tipo == "triage":
+                    resultado["triage"] = evento
+                elif tipo == "hallazgo":
+                    resultado["hallazgos"].append(evento["hallazgo"])
+                elif tipo in ("aprobacion", "accion_registrada"):
+                    resultado["aprobaciones"].append(evento)
+                elif tipo == "delta":
                     texto.append(evento.get("delta", ""))
-                elif evento.get("type") == "done":
-                    meta = evento
-                elif evento.get("type") == "error":
-                    return {"error": evento.get("error"), "reporte": "".join(texto)}
+                elif tipo == "done":
+                    resultado["meta"] = evento
+                elif tipo == "error":
+                    resultado["error"] = evento.get("error")
+    except urllib.error.HTTPError as e:
+        resultado["error"] = f"HTTP {e.code}: {e.read().decode(errors='ignore')[:200]}"
     except (urllib.error.URLError, OSError) as e:
-        return {"error": f"agente no disponible: {e}", "reporte": ""}
-    return {"reporte": "".join(texto), "meta": meta}
+        resultado["error"] = f"agente no disponible: {e}"
+    resultado["reporte"] = "".join(texto)
+    return resultado
+
+
+def contrastar(triage: dict | None, verdad: dict) -> dict:
+    """Compara lo que el agente detecto contra lo que de verdad paso. El agente
+    nunca ve esto; sale del groundtruth del bus."""
+    reales = {i["incidente_id"]: i["tipo"] for i in verdad.get("incidentes", [])
+              if not i.get("resuelto")}
+    tipos_reales = sorted(set(reales.values()))
+    detectados = triage["incidentes"] if triage else []
+    tipos_detectados = sorted({i["tipo"] for i in detectados})
+
+    return {
+        "incidentes_reales": len(reales),
+        "incidentes_detectados": len(detectados),
+        "tipos_reales": tipos_reales,
+        "tipos_detectados": tipos_detectados,
+        "tipos_acertados": sorted(set(tipos_reales) & set(tipos_detectados)),
+        "tipos_no_detectados": sorted(set(tipos_reales) - set(tipos_detectados)),
+        "tipos_inventados": sorted(set(tipos_detectados) - set(tipos_reales)),
+        "descartados": len(triage["descartados"]) if triage else 0,
+    }
 
 
 def corrida() -> dict:
     canales = recoger_evidencia()
     volcado = armar_volcado(canales)
     verdad = _get(f"{BUS_URL}/api/verdad") or {}
-    resultado = preguntar_al_agente(canales)
+    resultado = preguntar_al_agente(volcado)
     return {
         "canales_disponibles": [c for c, v in canales.items() if v is not None],
         "canales_caidos": [c for c, v in canales.items() if v is None],
         "volcado": volcado,
         "agente": resultado,
-        "verdad": {
-            "total_incidentes": verdad.get("total_incidentes"),
-            "activos": verdad.get("activos"),
-            "por_tipo": verdad.get("por_tipo"),
-        },
+        "contraste": contrastar(resultado.get("triage"), verdad),
     }
 
 
@@ -203,30 +205,88 @@ def main():
         print(json.dumps(resultado, ensure_ascii=False, indent=2))
         return
 
-    print("=" * 70)
-    print("EVIDENCIA RECOGIDA")
-    print("=" * 70)
+    agente = resultado["agente"]
+
+    print("=" * 72)
+    print("1. EVIDENCIA RECOGIDA")
+    print("=" * 72)
     for canal, lineas in canales.items():
         estado = "no disponible" if lineas is None else f"{len(lineas)} lineas"
         print(f"  {canal:12s} {estado}")
 
-    print()
-    print("=" * 70)
-    print("REPORTE DEL AGENTE")
-    print("=" * 70)
-    agente = resultado["agente"]
     if agente.get("error"):
-        print(f"  ERROR: {agente['error']}")
-    print(agente.get("reporte", ""))
+        print(f"\n  ERROR: {agente['error']}")
+        return
 
-    verdad = resultado["verdad"]
     print()
-    print("=" * 70)
-    print("VERDAD (para contrastar, el agente no la ve)")
-    print("=" * 70)
-    print(f"  incidentes reales: {verdad.get('total_incidentes')} "
-          f"(activos: {verdad.get('activos')})")
-    print(f"  por tipo: {verdad.get('por_tipo')}")
+    print("=" * 72)
+    print("2. TRIAGE — que detecto el agente")
+    print("=" * 72)
+    triage = agente.get("triage") or {}
+    for inc in triage.get("incidentes", []):
+        print(f"  [{inc['id']}] {inc['tipo']} · {inc['severidad']}"
+              f"{' · ATAQUE ACTIVO' if inc.get('ataque_activo') else ''}")
+        print(f"        {inc['titulo']}")
+        print(f"        -> {', '.join(inc['especialistas'])}: {inc['motivo_ruteo']}")
+        for ev in inc.get("evidencia", [])[:2]:
+            print(f"        evidencia: {ev[:88]}")
+    if triage.get("descartados"):
+        print(f"\n  Descartado ({len(triage['descartados'])}):")
+        for d in triage["descartados"]:
+            print(f"    - {d['senal'][:60]} :: {d['motivo'][:70]}")
+    if triage.get("diferidos"):
+        print(f"\n  Diferidos por presupuesto: {len(triage['diferidos'])}")
+
+    if agente.get("hallazgos"):
+        print()
+        print("=" * 72)
+        print("3. HALLAZGOS — que dijo cada especialista")
+        print("=" * 72)
+        for h in agente["hallazgos"]:
+            print(f"  [{h['incidente_id']}] {h['especialista']} · {h.get('estado')}"
+                  f" · confianza={h.get('confianza', '-')}")
+            if h.get("causa_raiz"):
+                print(f"        causa raiz: {h['causa_raiz'][:88]}")
+            if h.get("accion"):
+                print(f"        accion propuesta: {h['accion']['action_id']} {h['accion'].get('params', {})}")
+
+    if agente.get("aprobaciones"):
+        print()
+        print("=" * 72)
+        print("4. ACCIONES ESPERANDO DECISION HUMANA")
+        print("=" * 72)
+        for a in agente["aprobaciones"]:
+            if a.get("type") == "aprobacion":
+                print(f"  PENDIENTE  {a['action_id']} (riesgo {a['riesgo']}) id={a['aprobacion_id']}")
+            else:
+                print(f"  registrada {a['action_id']} (riesgo bajo, no requiere aprobacion)")
+
+    if agente.get("reporte"):
+        print()
+        print("=" * 72)
+        print("5. REPORTE EJECUTIVO")
+        print("=" * 72)
+        print(agente["reporte"])
+
+    c = resultado["contraste"]
+    print()
+    print("=" * 72)
+    print("6. CONTRASTE CONTRA LA VERDAD (el agente no la ve)")
+    print("=" * 72)
+    print(f"  incidentes reales activos : {c['incidentes_reales']}")
+    print(f"  incidentes detectados     : {c['incidentes_detectados']}")
+    print(f"  tipos reales              : {c['tipos_reales']}")
+    print(f"  tipos detectados          : {c['tipos_detectados']}")
+    print(f"  acerto                    : {c['tipos_acertados']}")
+    if c["tipos_no_detectados"]:
+        print(f"  NO detecto                : {c['tipos_no_detectados']}")
+    if c["tipos_inventados"]:
+        print(f"  invento (no estaban)      : {c['tipos_inventados']}")
+
+    meta = agente.get("meta", {})
+    if meta:
+        print(f"\n  modo={meta.get('mode')} llamadas={meta.get('llamadas')} "
+              f"latencia={meta.get('latency_ms')}ms estado={meta.get('status')}")
 
 
 # --- Modo servicio, para disparar una corrida desde una UI --------------------
