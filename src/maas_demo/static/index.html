@@ -18,7 +18,7 @@
           <p class="eyebrow">Huawei Cloud · ModelArts Studio</p>
           <h1>Convierte logs ruidosos en una causa raíz defendible.</h1>
           <p class="lede">
-            Un vertical slice con streaming, métricas y modo de ejecución visible.
+            Triage, especialistas en paralelo y consolidación, visibles paso a paso.
           </p>
         </div>
         <div id="mode-badge" class="badge" aria-live="polite">Comprobando…</div>
@@ -35,14 +35,23 @@
             placeholder="Ej.: 10:15:03 500 GET /checkout alert=ALRT-9001, justo después de un deploy…"
           ></textarea>
           <div class="examples" aria-label="Ejemplos">
-            <button type="button" data-prompt="10:15:03 500 GET /checkout alert=ALRT-9001, justo después de un deploy. ¿Cuál es la causa raíz?">
-              Spike tras deploy
+            <button type="button" data-prompt="10:15:03 cpu.pct=97 mem.available=120MB conn.active=980; 10:15:07 503 GET /checkout alert=ALRT-9001 con trafico 4200 req/min; 10:16:22 timeout del proveedor de la pasarela de pago; 10:17:01 lock_wait 30s en la tabla pedidos.">
+              Volcado de monitoreo
             </button>
-            <button type="button" data-prompt="Tres 401 seguidos de la cuenta de servicio svc-cache. El equipo sospecha fuerza bruta. Evalúa la hipótesis con la evidencia disponible.">
+            <button type="button" data-prompt="10:41:02 401 user=svc-cache; 10:41:03 401 user=svc-cache; 10:41:05 401 user=svc-cache; 10:42:10 acceso a 169.254.169.254 desde el pod api-7f. El equipo sospecha fuerza bruta. Evalúa la hipótesis con la evidencia disponible.">
               ¿Ataque o falso positivo?
             </button>
           </div>
           <button id="submit" class="primary" type="button">Investigar incidente</button>
+
+          <h2 class="section-title">Proceso del agente</h2>
+          <ol id="pipeline" class="pipeline">
+            <li data-phase="ingesta"><span class="dot"></span>Ingesta</li>
+            <li data-phase="triage"><span class="dot"></span>Triage</li>
+            <li data-phase="despacho"><span class="dot"></span>Especialistas</li>
+            <li data-phase="consolidacion"><span class="dot"></span>Consolidación</li>
+          </ol>
+          <p id="live-log" class="live-log" aria-live="polite"></p>
         </div>
 
         <article class="output-panel" aria-labelledby="result-title">
@@ -50,10 +59,35 @@
             <h2 id="result-title">Diagnóstico del incidente</h2>
             <span id="status">Listo</span>
           </div>
+
+          <section aria-labelledby="triage-title" class="block">
+            <h3 id="triage-title">Incidentes detectados <span id="triage-count" class="count">0</span></h3>
+            <div id="severity-chart" class="chart" role="img" aria-label="Distribución de incidentes por severidad"></div>
+            <ul id="incidents" class="cards"></ul>
+          </section>
+
+          <section aria-labelledby="tasks-title" class="block">
+            <h3 id="tasks-title">Especialistas</h3>
+            <ul id="tasks" class="tasks"></ul>
+          </section>
+
+          <section aria-labelledby="findings-title" class="block">
+            <h3 id="findings-title">Hallazgos con evidencia</h3>
+            <ul id="findings" class="cards"></ul>
+          </section>
+
+          <section aria-labelledby="approvals-title" class="block">
+            <h3 id="approvals-title">Acciones pendientes de aprobación</h3>
+            <ul id="approvals" class="cards"></ul>
+          </section>
+
+          <h3>Reporte consolidado</h3>
           <pre id="answer" tabindex="0">El diagnóstico aparecerá aquí.</pre>
+
           <dl class="metrics">
             <div><dt>Modo</dt><dd id="metric-mode">—</dd></div>
             <div><dt>Modelo</dt><dd id="metric-model">—</dd></div>
+            <div><dt>Llamadas</dt><dd id="metric-calls">—</dd></div>
             <div><dt>Latencia</dt><dd id="metric-latency">—</dd></div>
           </dl>
         </article>

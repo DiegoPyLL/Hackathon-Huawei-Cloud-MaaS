@@ -2,23 +2,30 @@
 """Corrida completa del agente, con verificación y almacén en un solo comando.
 
 Entrypoint que el ADR-0006, `docs/operations/despliegue.md` y
-`docs/development/entorno.md` ya daban por existente. Hace tres cosas que hasta
-ahora vivían separadas:
+`docs/development/entorno.md` ya daban por existente. Es el archivo único que
+encadena el flujo completo, y el mismo que invoca `corrida-programada.yml`: un
+solo código, dos disparadores.
 
 1. Corre la suite de tests y la **categoriza** (`--con-tests`).
-2. Ejecuta el flujo del agente sobre un volcado, tomándolo por defecto del
-   dataset del canal monitoreo (`projects/monitoreo/data/monitoreo_dumps.jsonl`),
-   y compara la salida contra el bloque `esperado` — algo que `evaluar.py` no
-   hace, porque solo lee `id`, `segment` y `prompt`.
-3. Persiste el resultado en Supabase si hay credenciales.
+2. Lee **todos** los logs de Supabase (`--desde-supabase`) o, por defecto, el
+   dataset del canal monitoreo, comparándolo contra su bloque `esperado`.
+3. Ejecuta el flujo multiagente —triage, especialistas, consolidación— y deja
+   la corrida persistida en Supabase.
+4. Emite los hallazgos como SARIF para GitHub code scanning (`--sarif`).
+5. Levanta el panel en `127.0.0.1:8080` para revisar y aprobar (`--panel`).
 
 Nunca presenta un fallo como éxito: si el almacén no está configurado lo declara
-y sigue; si falla, lo dice. Es la misma regla del `mock`/`live` de `AGENTS.md`.
+y sigue; si falla, lo dice; si el presupuesto corta la corrida, la marca parcial
+y nombra lo que quedó pendiente. Es la misma regla del `mock`/`live` de
+`AGENTS.md`.
 
 Uso:
     python3 scripts/ejecutablesBase/ejecutar-corrida.py --mode mock --con-tests
     python3 scripts/ejecutablesBase/ejecutar-corrida.py --caso monitoreo-camino-feliz-01
     python3 scripts/ejecutablesBase/ejecutar-corrida.py --verificar-almacen
+
+    # el flujo entero en local, en un comando
+    python3 scripts/ejecutablesBase/ejecutar-corrida.py --con-tests --desde-supabase         --sarif evals/results/incidentes.sarif --json-out evals/results/corrida.json --panel
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -37,11 +45,15 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.maas_demo.almacen import Almacen, AlmacenError  # noqa: E402
 from src.maas_demo.config import Config, ConfigError  # noqa: E402
 from src.maas_demo.dotenv import load_dotenv  # noqa: E402
+from src.maas_demo.orchestrator import MemoryStore, Orchestrator  # noqa: E402
 from src.maas_demo.provider import ProviderError, build_provider  # noqa: E402
+from src.maas_demo.sarif import construir_sarif  # noqa: E402
+from src.maas_demo.server import create_server  # noqa: E402
 from src.maas_demo.service import ChatService  # noqa: E402
 
 
 DATASET_MONITOREO = PROJECT_ROOT / "projects" / "monitoreo" / "data" / "monitoreo_dumps.jsonl"
+INVENTARIO = Path("evals") / "results" / "incidentes-supabase.jsonl"
 SECCIONES = ("Tipo de incidente", "Causa raíz", "Evidencia", "Qué se descartó", "Acción correctiva")
 
 # Cada módulo de test cae en una categoría legible para el resumen final.
@@ -51,6 +63,7 @@ CATEGORIAS = {
     "test_almacen": "conexion-supabase",
     "test_full_flow": "flujo-agente",
     "test_corrida": "corrida-unica",
+    "test_sarif": "salida-sarif",
 }
 CATEGORIA_POR_DEFECTO = "vertical-slice"
 
@@ -224,6 +237,219 @@ def ejecutar_caso(servicio: ChatService, caso: dict) -> dict:
 
 
 # ===========================================================================
+# Flujo multiagente alimentado por Supabase
+# ===========================================================================
+
+def _texto_incidente(fila: dict) -> str:
+    logs = fila.get("logs_adjuntos") or []
+    if isinstance(logs, str):
+        logs = [logs]
+    # Sin nada que analizar no se fabrica un volcado: las etiquetas por si
+    # solas darian un prompt no vacio y el agente razonaria sobre el aire.
+    if not (fila.get("titulo") or fila.get("descripcion") or logs):
+        return ""
+    partes = [
+        f"TICKET {fila.get('ticket_numero', 's/n')}: {fila.get('titulo', '')}",
+        f"Sistema afectado: {fila.get('sistema_afectado', 'no declarado')}",
+        f"Severidad declarada: {fila.get('severidad', 'no declarada')}",
+        fila.get("descripcion", ""),
+    ]
+    partes += [f"LOG: {json.dumps(linea, ensure_ascii=False) if not isinstance(linea, str) else linea}"
+               for linea in logs]
+    return "\n".join(parte for parte in partes if parte)
+
+
+def _texto_email(fila: dict) -> str:
+    if not (fila.get("asunto") or fila.get("cuerpo")):
+        return ""
+    return "\n".join([
+        f"De: {fila.get('remitente', 'desconocido')}",
+        f"Asunto: {fila.get('asunto', '')}",
+        fila.get("cuerpo", ""),
+    ])
+
+
+def volcados_desde_supabase(config: Config) -> list[dict]:
+    """Todo lo que hay en Supabase, convertido en volcados para el orquestador.
+
+    Se leen las dos tablas de entrada completas —`consultar_todo` pagina, porque
+    PostgREST corta en 1000 filas—. El contenido son datos a analizar: el
+    orquestador ya trata los logs como datos y nunca como instrucciones.
+    """
+    if not config.hay_almacen:
+        raise SystemExit("[almacen] faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY: no hay logs que repasar.")
+    almacen = Almacen(url=config.supabase_url, service_key=config.supabase_key)
+
+    volcados: list[dict] = []
+    for tabla, canal, formatear in (
+        ("incidentes", "monitoreo", _texto_incidente),
+        ("emails_entrantes", "email-soporte", _texto_email),
+    ):
+        try:
+            filas = almacen.consultar_todo(tabla)
+        except AlmacenError as error:
+            print(f"[almacen] no se pudo leer '{tabla}': {error}")
+            continue
+        print(f"[almacen] {tabla}: {len(filas)} fila(s)")
+        for fila in filas:
+            prompt = formatear(fila).strip()
+            if prompt:
+                volcados.append({
+                    "id": fila.get("ticket_numero") or fila.get("message_id") or fila.get("id", ""),
+                    "origen": f"{tabla}/{fila.get('id', '')}",
+                    "canal": canal,
+                    "prompt": prompt,
+                })
+    return volcados
+
+
+def escribir_inventario(volcados: list[dict], ruta: Path) -> None:
+    """Deja en disco lo que se leyó: es a lo que apuntan las alertas del SARIF."""
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    with ruta.open("w", encoding="utf-8") as archivo:
+        for volcado in volcados:
+            archivo.write(json.dumps(volcado, ensure_ascii=False) + "\n")
+
+
+def orquestar(config: Config, volcados: list[dict], presupuesto_minutos: float) -> tuple[list[dict], list[dict]]:
+    """Corre el flujo multiagente sobre cada volcado. Devuelve (corridas, pendientes).
+
+    El presupuesto corta entre volcados, nunca a mitad de uno. Lo que quedó sin
+    procesar se devuelve para declararlo: una corrida truncada no se presenta
+    como completa.
+    """
+    store = MemoryStore()
+    orquestador = Orchestrator(config, store)
+    limite = time.monotonic() + presupuesto_minutos * 60 if presupuesto_minutos > 0 else None
+
+    corridas: list[dict] = []
+    for indice, volcado in enumerate(volcados, start=1):
+        if limite is not None and time.monotonic() >= limite:
+            print(f"[flujo] presupuesto de {presupuesto_minutos:g} min agotado.")
+            return corridas, volcados[indice - 1:]
+
+        etiqueta = f"{volcado['id']}"[:34]
+        run_id, persistida = "", True
+        try:
+            for evento in orquestador.stream(volcado):
+                run_id = run_id or evento.get("run_id", "")
+            resultado = store.get(run_id)
+        except (ProviderError, ValueError, TypeError) as error:
+            # El orquestador guarda en memoria antes de persistir. Si lo que
+            # falló fue la escritura en Supabase, el análisis es válido y se
+            # conserva: se declara el fallo, no se descarta el trabajo hecho.
+            resultado = store.get(run_id) if run_id else None
+            if resultado is None:
+                print(f"  {etiqueta:<34} FALLO: {error}")
+                continue
+            persistida = False
+            print(f"  {etiqueta:<34} SIN PERSISTIR: {error}")
+
+        if resultado is None:
+            print(f"  {etiqueta:<34} FALLO: la corrida no dejó resultado.")
+            continue
+
+        resultado |= {"origen": volcado["origen"], "linea": indice, "persistida": persistida}
+        corridas.append(resultado)
+        print(
+            f"  {etiqueta:<34} {resultado['status']:<11}"
+            f" incidentes={len(resultado['triage']['incidentes'])}"
+            f" hallazgos={len(resultado['hallazgos'])}"
+            f" fallidos={resultado['fallidos']}"
+            f" {resultado['latency_ms']}ms"
+        )
+    return corridas, []
+
+
+def escribir_sarif(corridas: list[dict], ruta: Path) -> int:
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    documento = construir_sarif(corridas, inventario=INVENTARIO.as_posix())
+    ruta.write_text(json.dumps(documento, ensure_ascii=False, indent=2), encoding="utf-8")
+    total = len(documento["runs"][0]["results"])
+    print(f"[sarif] {total} alerta(s) en {ruta}")
+    return total
+
+
+def flujo_supabase(config: Config, args: argparse.Namespace) -> int:
+    volcados = volcados_desde_supabase(config)
+    if not volcados:
+        print("[almacen] no hay logs que repasar. No se inventa una corrida.")
+        return 1
+
+    escribir_inventario(volcados, PROJECT_ROOT / INVENTARIO)
+    print(f"\n[flujo] modo={config.mode} modelo={config.model} volcados={len(volcados)}")
+    corridas, pendientes = orquestar(config, volcados, args.presupuesto_minutos)
+
+    hallazgos = sum(len(c["hallazgos"]) for c in corridas)
+    sin_persistir = [c["origen"] for c in corridas if not c["persistida"]]
+    print(f"\n[flujo] {len(corridas)}/{len(volcados)} volcados procesados, {hallazgos} hallazgos.")
+    if pendientes:
+        print(f"[flujo] PARCIAL: {len(pendientes)} volcados quedaron sin procesar.")
+    if sin_persistir:
+        print(f"[flujo] {len(sin_persistir)} corridas se analizaron pero NO quedaron en Supabase.")
+
+    if args.sarif:
+        escribir_sarif(corridas, args.sarif)
+
+    resumen = {
+        "modo": config.mode,
+        "modelo": config.model,
+        "fuente": "supabase",
+        "volcados": len(volcados),
+        "procesados": len(corridas),
+        "pendientes": [v["origen"] for v in pendientes],
+        "sin_persistir": sin_persistir,
+        "hallazgos": hallazgos,
+        "estado": "parcial" if pendientes or sin_persistir else "completada",
+        "corridas": [
+            {k: c[k] for k in ("run_id", "origen", "status", "llamadas", "latency_ms",
+                               "fallidos", "persistida")}
+            for c in corridas
+        ],
+    }
+    escribir_resumen_supabase(resumen)
+    if args.json_out:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
+        args.json_out.write_text(json.dumps(resumen, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"[salida] {args.json_out}")
+
+    return 0 if corridas and not pendientes and not sin_persistir else 1
+
+
+def escribir_resumen_supabase(resumen: dict) -> None:
+    """Publica el resultado de la corrida en el resumen del job de Actions."""
+    destino = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not destino:
+        return
+    icono = "⚠️" if resumen["estado"] == "parcial" else "✅"
+    lineas = [
+        f"## {icono} Corrida sobre Supabase ({resumen['modo']})",
+        "",
+        f"- Volcados leídos: **{resumen['volcados']}**",
+        f"- Procesados: **{resumen['procesados']}**",
+        f"- Hallazgos: **{resumen['hallazgos']}**",
+        f"- Estado: **{resumen['estado']}**",
+    ]
+    if resumen["pendientes"]:
+        lineas += ["", f"Sin procesar por presupuesto: {len(resumen['pendientes'])}."]
+    if resumen["sin_persistir"]:
+        lineas += ["", f"Analizadas pero no guardadas en Supabase: {len(resumen['sin_persistir'])}."]
+    with open(destino, "a", encoding="utf-8") as resumen_actions:
+        resumen_actions.write("\n".join(lineas) + "\n\n")
+
+
+def levantar_panel(config: Config) -> None:
+    servidor = create_server(config, host="127.0.0.1", port=8080)
+    print("\n[panel] http://127.0.0.1:8080 — Ctrl+C para salir.")
+    try:
+        servidor.serve_forever()
+    except KeyboardInterrupt:
+        print("\n[panel] detenido.")
+    finally:
+        servidor.server_close()
+
+
+# ===========================================================================
 # Almacén
 # ===========================================================================
 
@@ -301,6 +527,14 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--leer-tabla", default="",
                     help="muestra las filas de una tabla del almacen y sale")
     ap.add_argument("--json-out", type=Path, help="escribe el resumen de la corrida")
+    ap.add_argument("--desde-supabase", action="store_true",
+                    help="repasa todos los logs del almacen con el flujo multiagente")
+    ap.add_argument("--sarif", type=Path,
+                    help="escribe los hallazgos como SARIF para GitHub code scanning")
+    ap.add_argument("--presupuesto-minutos", type=float, default=0.0,
+                    help="corta la corrida al agotarse y declara lo que quedo pendiente (0 = sin corte)")
+    ap.add_argument("--panel", action="store_true",
+                    help="levanta el panel en 127.0.0.1:8080 al terminar")
     return ap.parse_args()
 
 
@@ -338,7 +572,15 @@ def main() -> int:
     if args.leer_tabla:
         return leer_tabla(config, args.leer_tabla, limite=max(1, args.limite))
 
-    # 2. El flujo, alimentado por el dataset del canal monitoreo.
+    # 2. El flujo multiagente sobre todo lo que hay en Supabase.
+    if args.desde_supabase:
+        codigo = flujo_supabase(config, args)
+        print("=" * 62)
+        if args.panel:
+            levantar_panel(config)
+        return codigo
+
+    # 2b. El flujo de un solo agente, alimentado por el dataset del canal monitoreo.
     casos = cargar_volcados(args.dataset)
     if args.caso:
         casos = [c for c in casos if c.get("id") == args.caso]
@@ -391,6 +633,8 @@ def main() -> int:
         print(f"[salida] {args.json_out}")
 
     print("=" * 62)
+    if args.panel:
+        levantar_panel(config)
     return 0 if aciertos == len(resultados) else 1
 
 

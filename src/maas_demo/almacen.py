@@ -127,12 +127,29 @@ class Almacen:
         total = rango.rsplit("/", 1)[-1] if "/" in rango else ""
         return int(total) if total.isdigit() else 0
 
-    def consultar(self, tabla: str, *, limite: int = 20, orden: str | None = None) -> list[dict]:
-        ruta = f"/{tabla}?select=*&limit={int(limite)}"
+    def consultar(self, tabla: str, *, limite: int = 20, orden: str | None = None,
+                  desplazamiento: int = 0) -> list[dict]:
+        ruta = f"/{tabla}?select=*&limit={int(limite)}&offset={int(desplazamiento)}"
         if orden:
             ruta += f"&order={urllib.parse.quote(orden, safe='.')}"
         filas = self._pedir("GET", ruta)
         return filas if isinstance(filas, list) else [filas]
+
+    def consultar_todo(self, tabla: str, *, pagina: int = 1000,
+                       orden: str | None = None) -> list[dict]:
+        """Todas las filas de la tabla, paginando.
+
+        PostgREST corta la respuesta en 1000 filas por defecto, así que una sola
+        llamada a `consultar` no significa "todo" aunque lo parezca: devolvería
+        un subconjunto silencioso. Se pide página a página hasta que una vuelva
+        incompleta.
+        """
+        filas: list[dict] = []
+        while True:
+            lote = self.consultar(tabla, limite=pagina, orden=orden, desplazamiento=len(filas))
+            filas.extend(lote)
+            if len(lote) < pagina:
+                return filas
 
     def insertar(self, tabla: str, fila: dict) -> list[dict]:
         filas = self._pedir(

@@ -171,6 +171,46 @@ class ConteoTests(unittest.TestCase):
         self.assertTrue(all(KEY not in str(v) for v in conteos.values()))
 
 
+class PaginacionTests(unittest.TestCase):
+    """`consultar_todo` no puede confiar en una sola llamada: PostgREST corta."""
+
+    def _almacen_con_paginas(self, paginas):
+        self.peticiones = []
+
+        def opener(request, timeout=None):
+            self.peticiones.append(request.full_url)
+            filas = paginas.pop(0) if paginas else []
+            return RespuestaFalsa(json.dumps(filas).encode("utf-8"))
+
+        return Almacen(url="https://p.supabase.co", service_key=KEY, opener=opener)
+
+    def test_pide_paginas_hasta_una_incompleta(self) -> None:
+        almacen = self._almacen_con_paginas([
+            [{"id": i} for i in range(3)],
+            [{"id": 3}],
+        ])
+        filas = almacen.consultar_todo("incidentes", pagina=3)
+        self.assertEqual(len(filas), 4)
+        self.assertEqual(len(self.peticiones), 2)
+        self.assertIn("offset=0", self.peticiones[0])
+        self.assertIn("offset=3", self.peticiones[1])
+
+    def test_una_pagina_incompleta_no_pide_otra(self) -> None:
+        almacen = self._almacen_con_paginas([[{"id": 0}]])
+        self.assertEqual(len(almacen.consultar_todo("incidentes", pagina=100)), 1)
+        self.assertEqual(len(self.peticiones), 1)
+
+    def test_tabla_vacia_devuelve_lista_vacia(self) -> None:
+        almacen = self._almacen_con_paginas([[]])
+        self.assertEqual(almacen.consultar_todo("incidentes"), [])
+
+    def test_consultar_acepta_desplazamiento(self) -> None:
+        almacen = self._almacen_con_paginas([[]])
+        almacen.consultar("incidentes", limite=5, desplazamiento=10)
+        self.assertIn("limit=5", self.peticiones[0])
+        self.assertIn("offset=10", self.peticiones[0])
+
+
 class ConfigAlmacenTests(unittest.TestCase):
     def test_supabase_url_debe_ser_https(self) -> None:
         with mock.patch.dict("os.environ", {"SUPABASE_URL": "http://inseguro"}, clear=True):
