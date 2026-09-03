@@ -12,6 +12,7 @@ from typing import Any
 from .config import Config
 from .provider import ProviderError, build_provider
 from .service import ChatService, ValidationError
+from .orchestrator import MemoryStore, Orchestrator
 
 
 STATIC_DIR = Path(__file__).with_name("static")
@@ -25,6 +26,8 @@ STATIC_ROUTES = {
 
 def create_handler(config: Config):
     service = ChatService(build_provider(config))
+    store = MemoryStore()
+    orchestrator = Orchestrator(config, store)
 
     class AppHandler(BaseHTTPRequestHandler):
         server_version = "MaaSVerticalSlice/1.0"
@@ -33,8 +36,19 @@ def create_handler(config: Config):
             if self.path == "/api/health":
                 self._json(
                     HTTPStatus.OK,
-                    {"status": "ok", "mode": config.mode, "model": config.model},
+                    {"status": "ok", "mode": config.mode, "model": config.model,
+                     "datos": "SUPABASE" if config.supabase_url and config.supabase_service_role_key else "NO CONFIGURADO"},
                 )
+                return
+            if self.path.startswith("/api/corridas/"):
+                result = store.get(self.path.rsplit("/", 1)[-1])
+                if result is None:
+                    self._json(HTTPStatus.NOT_FOUND, {"error": "Corrida no encontrada."})
+                else:
+                    self._json(HTTPStatus.OK, result)
+                return
+            if self.path == "/api/aprobaciones":
+                self._json(HTTPStatus.OK, {"mode": config.mode, "datos": "NO CONFIGURADO", "aprobaciones": store.pending()})
                 return
             filename = STATIC_ROUTES.get(self.path)
             if filename is None:
@@ -43,6 +57,35 @@ def create_handler(config: Config):
             self._static(filename)
 
         def do_POST(self) -> None:
+            if self.path.startswith("/api/aprobaciones/"):
+                approval_id = self.path.rsplit("/", 1)[-1]
+                approval = store.approvals.get(approval_id)
+                if approval is None:
+                    self._json(HTTPStatus.NOT_FOUND, {"error": "Aprobación no encontrada."})
+                    return
+                if approval["estado"] != "pendiente":
+                    self._json(HTTPStatus.CONFLICT, {"error": "La aprobación ya fue decidida."})
+                    return
+                try:
+                    payload = self._read_json()
+                    decision = payload.get("decision")
+                    if decision not in {"aprobada", "rechazada"}:
+                        raise ValueError("decision debe ser aprobada o rechazada.")
+                    approval.update({"estado": decision, "actor": payload.get("actor", "operador-local"), "nota": payload.get("nota", "")})
+                    self._json(HTTPStatus.OK, approval)
+                except ValueError as error:
+                    self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+            if self.path == "/api/incidentes/run":
+                try:
+                    payload = self._read_json()
+                    record = {"id": payload.get("id"), "canal": payload.get("canal", "monitoreo"), "prompt": payload.get("prompt")}
+                    stream = orchestrator.stream(record)
+                except (ValueError, TypeError) as error:
+                    self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                    return
+                self._stream_events(stream)
+                return
             if self.path != "/api/chat/stream":
                 self._json(HTTPStatus.NOT_FOUND, {"error": "Ruta no encontrada."})
                 return
@@ -53,6 +96,9 @@ def create_handler(config: Config):
                 self._json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
                 return
 
+            self._stream_events(stream)
+
+        def _stream_events(self, stream: Any) -> None:
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/event-stream; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -62,7 +108,7 @@ def create_handler(config: Config):
             try:
                 for event in stream:
                     self._sse(event)
-            except (ProviderError, OSError) as error:
+            except (ProviderError, OSError, ValueError) as error:
                 self._sse({"type": "error", "error": str(error)})
             self.close_connection = True
 
