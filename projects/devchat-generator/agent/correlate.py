@@ -4,10 +4,17 @@ Correlación y deduplicación cross-canal.
 Dos incidentes consolidados se consideran duplicados si:
   - Ambos son incidentes reales (es_incidente=True, categoría en la taxonomía).
   - Mismo servicio afectado.
-  - Misma categoría.
+  - Categorías de la misma familia (ver FAMILIAS).
   - Timestamps dentro de una ventana de tiempo (default 30 min).
 
 El segundo se marca como duplicado del primero (duplicado_de = primer_id).
+
+Sobre las familias: exigir categoría idéntica rompía el caso más común. El mismo
+corte entra como `indisponibilidad` por monitoring y como `degradacion` por el
+chat, porque cada canal lo describe desde donde lo ve; `taxonomia_incidentes.md`
+ya advierte que el clasificador confunde esas vecinas. Comparando por familia se
+deduplica igual, y el riesgo de unir dos incidentes que no van juntos queda
+acotado por el servicio y la ventana de tiempo.
 """
 
 from __future__ import annotations
@@ -15,7 +22,24 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Iterable
 
-from .schema import IncidenteConsolidado, CATEGORIAS_INCIDENTE
+from .schema import Categoria, IncidenteConsolidado, CATEGORIAS_INCIDENTE
+
+
+FAMILIAS = (
+    # el servicio no responde bien
+    {Categoria.indisponibilidad, Categoria.degradacion, Categoria.capacidad},
+    # el servicio responde, pero mal
+    {Categoria.error_funcional, Categoria.datos},
+    # quién entra y con qué permisos
+    {Categoria.acceso_identidad, Categoria.seguridad},
+    {Categoria.integracion_terceros},
+)
+
+
+def misma_familia(a: Categoria, b: Categoria) -> bool:
+    if a == b:
+        return True
+    return any(a in familia and b in familia for familia in FAMILIAS)
 
 
 def correlacionar(
@@ -43,7 +67,7 @@ def correlacionar(
             if (
                 inc.servicio_afectado
                 and inc.servicio_afectado == otro.servicio_afectado
-                and inc.categoria == otro.categoria
+                and misma_familia(inc.categoria, otro.categoria)
             ):
                 otro.duplicado_de = inc.id
 

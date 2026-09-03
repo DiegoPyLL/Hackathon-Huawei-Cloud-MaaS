@@ -39,18 +39,25 @@ def _next_id() -> str:
     return f"INC-AGENT-{next(_id_counter):04d}"
 
 
-def _safe_categoria(val: str) -> Categoria:
+def _parse_categoria(val: str) -> tuple[Categoria, str | None]:
+    """Devuelve (categoria, motivo_revision).
+
+    Una categoría fuera de la taxonomía NO se convierte en `ruido`: eso haría
+    desaparecer un incidente real sin dejar rastro, que es el falso negativo más
+    caro que puede tener este agente. Se marca para revisión humana y se declara
+    el valor que devolvió el modelo.
+    """
     try:
-        return Categoria(val)
+        return Categoria(val), None
     except ValueError:
-        return Categoria.ruido
+        return Categoria.ruido, f"el clasificador devolvió una categoría fuera de la taxonomía: {val!r}"
 
 
-def _safe_severidad(val: str) -> Severidad:
+def _parse_severidad(val: str) -> tuple[Severidad, str | None]:
     try:
-        return Severidad(val)
+        return Severidad(val), None
     except ValueError:
-        return Severidad.n_a
+        return Severidad.n_a, f"severidad fuera del enum: {val!r}"
 
 
 def triage(
@@ -63,8 +70,11 @@ def triage(
     clasificacion = classify_incident(client, senal)
     logger.info("classified: %s", clasificacion.get("categoria"))
 
-    categoria = _safe_categoria(clasificacion.get("categoria", "ruido"))
-    severidad = _safe_severidad(clasificacion.get("severidad", "n/a"))
+    categoria, motivo_cat = _parse_categoria(clasificacion.get("categoria", "ruido"))
+    severidad, motivo_sev = _parse_severidad(clasificacion.get("severidad", "n/a"))
+    motivo_revision = motivo_cat or motivo_sev
+    if motivo_revision:
+        logger.warning("requiere revision: %s", motivo_revision)
     es_incidente = clasificacion.get("es_incidente", False)
     servicio = clasificacion.get("servicio_afectado") or senal.servicio_afectado
     confianza = float(clasificacion.get("confianza", 0.5))
@@ -101,7 +111,9 @@ def triage(
         acciones_recomendadas=acciones,
         incidentes_previos_similares=incidentes_previos,
         dueño_sugerido=dueño_sugerido(categoria) if es_incidente else None,
-        confianza=confianza_final,
+        confianza=0.0 if motivo_revision else confianza_final,
+        requiere_revision=motivo_revision is not None,
+        motivo_revision=motivo_revision,
         timestamp=senal.timestamp,
         metadata={"canal_raw": senal.metadata},
     )

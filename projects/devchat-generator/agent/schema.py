@@ -93,6 +93,11 @@ class IncidenteConsolidado(BaseModel):
     dueño_sugerido: str | None = None
     duplicado_de: str | None = Field(default=None, description="ID de otro incidente si este es duplicado")
     confianza: float = Field(ge=0.0, le=1.0)
+    requiere_revision: bool = Field(
+        default=False,
+        description="El clasificador devolvió algo que no valida contra la taxonomía",
+    )
+    motivo_revision: str | None = None
     timestamp: datetime
     metadata: dict[str, Any] = Field(default_factory=dict)
 

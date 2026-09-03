@@ -9,12 +9,29 @@ Model routing:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from typing import Any
 
-from openai import OpenAI
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    OpenAI,
+    RateLimitError,
+)
+
+logger = logging.getLogger("agent.maas")
+
+MAX_REINTENTOS = 2
+BACKOFF_BASE = 1.5
+
+
+class MaaSError(RuntimeError):
+    """Fallo de MaaS ya diagnosticado: la causa va en el mensaje."""
 
 
 _CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL)
@@ -78,7 +95,36 @@ class MaaSClient:
             kwargs["tools"] = tools
         if response_format:
             kwargs["response_format"] = response_format
-        return self._client.chat.completions.create(**kwargs)
+
+        # La inferencia corre en Hong Kong: un timeout o un 429 puntual desde
+        # Chile es escenario probable, no teorico. Se reintenta lo transitorio y
+        # se falla rapido y con causa clara en lo que no tiene arreglo.
+        ultimo_error: Exception | None = None
+        for intento in range(MAX_REINTENTOS + 1):
+            try:
+                return self._client.chat.completions.create(**kwargs)
+            except (RateLimitError, APITimeoutError, APIConnectionError) as error:
+                ultimo_error = error
+                if intento == MAX_REINTENTOS:
+                    break
+                espera = BACKOFF_BASE * (2 ** intento)
+                logger.warning("MaaS %s, reintento %d en %.1fs", type(error).__name__, intento + 1, espera)
+                time.sleep(espera)
+            except APIStatusError as error:
+                if error.status_code == 401:
+                    raise MaaSError("MaaS rechazo la credencial (401): revisa MAAS_API_KEY.") from error
+                if error.status_code == 403:
+                    raise MaaSError(
+                        f"MaaS prohibio el acceso (403) al modelo {kwargs['model']!r}: "
+                        "la cuenta puede no tenerlo habilitado."
+                    ) from error
+                if error.status_code == 402:
+                    raise MaaSError("MaaS reporta saldo agotado (402).") from error
+                raise MaaSError(f"MaaS respondio HTTP {error.status_code}.") from error
+
+        raise MaaSError(
+            f"MaaS no respondio tras {MAX_REINTENTOS + 1} intentos: {type(ultimo_error).__name__}."
+        ) from ultimo_error
 
     def chat_json(
         self,
