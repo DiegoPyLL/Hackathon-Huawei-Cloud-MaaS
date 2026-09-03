@@ -120,6 +120,7 @@ def _serialize_incidente(inc: IncidenteConsolidado) -> dict:
 
 
 async def _broadcast(msg: dict):
+    global _ws_clients
     dead = set()
     for ws in _ws_clients:
         try:
