@@ -233,6 +233,26 @@ class OrchestratorContractTests(unittest.TestCase):
         self.assertIsNotNone(result["accion"])
         self.assertNotIn("accion_descartada", result)
 
+    def test_action_kept_when_unanchored_cita_is_irrelevant_to_params(self):
+        """N-07: si alguna cita no ancla pero los IDs de params estan en citas ancladas, la accion se mantiene."""
+        incident = valid_triage()["incidentes"][0]
+        volcado = "10:15:03 deploy_id=DEP-451 alert=ALRT-9001"
+        finding = valid_finding(incident, action={"action_id": "revertir_deploy", "params": {"deploy_id": "DEP-451"}, "justificacion": "x", "verificacion": "y"})
+        finding["evidencia"] = ["deploy_id=DEP-451 alert=ALRT-9001", "linea inventada irrelevante"]
+        result = validate_finding(finding, incident, "sysadmin", volcado=volcado)
+        self.assertIsNotNone(result["accion"])
+        self.assertIn("evidencia_no_verificada", result)
+
+    def test_action_anulled_when_unanchored_cita_is_the_only_respaldo_for_params(self):
+        """N-07: si la cita no anclada es la unica que respalda un ID de params, la accion se anula."""
+        incident = valid_triage()["incidentes"][0]
+        volcado = "10:15:03 alert=ALRT-9001"
+        finding = valid_finding(incident, action={"action_id": "revertir_deploy", "params": {"deploy_id": "DEP-451"}, "justificacion": "x", "verificacion": "y"})
+        finding["evidencia"] = ["alert=ALRT-9001", "deploy_id=DEP-451 linea inventada"]
+        result = validate_finding(finding, incident, "sysadmin", volcado=volcado)
+        self.assertIsNone(result["accion"])
+        self.assertIn("accion_descartada", result)
+
     def test_full_pipeline_creates_human_approval_and_persists_run(self):
         config = Config(mode="mock", api_key=None, base_url="https://unused", model="m")
         triage = valid_triage(active=True)

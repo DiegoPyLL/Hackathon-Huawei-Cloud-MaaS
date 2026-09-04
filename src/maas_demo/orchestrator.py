@@ -280,6 +280,18 @@ def _identificadores_no_anclados(params: dict[str, Any], evidencia: list[str]) -
     return no_anclados
 
 def validate_finding(value: Any, incident: dict[str, Any], specialist: str, volcado: str = "") -> dict[str, Any]:
+    """Valida un hallazgo de especialista contra el contrato y el volcado.
+
+    Criterio de anclaje de acciones (N-07): la acción se anula si **alguna** cita
+    de evidencia no ancla contra el volcado, **salvo** que todos los identificadores
+    de los ``params`` propuestos aparezcan en las citas **sí** ancladas. La intuición
+    es que una cita no anclada irrelevante para la acción (el especialista citó de
+    más, pero los IDs que usa la acción están respaldados) no debe tumbar una
+    acción legítima; en cambio, si la cita no anclada es la única que respalda un
+    identificador de params, la acción se anula porque ese identificador queda sin
+    respaldo verificable. Es un criterio conservativo: prefiere bloquear una acción
+    dudosa antes que dejar pasar una acción con evidencia inventada.
+    """
     if not isinstance(value, dict) or value.get("version") != "1": raise ValueError("Hallazgo sin version=1.")
     if value.get("incidente_id") != incident["id"] or value.get("especialista") != specialist: raise ValueError("Hallazgo no coincide con la tarea.")
     if value.get("confianza") not in {"alta", "media", "baja", "insuficiente"}: raise ValueError("confianza inválida.")
@@ -304,10 +316,14 @@ def validate_finding(value: Any, incident: dict[str, Any], specialist: str, volc
                 value["confianza"] = "media"
             elif confianza == "media":
                 value["confianza"] = "baja"
-            if value.get("accion") is not None and len(no_verificadas) == len(anclaje):
-                value["accion"] = None
-                value["viabilidad"] = "requiere_mas_datos"
-                value["accion_descartada"] = "La evidencia no ancla contra el volcado."
+            if value.get("accion") is not None:
+                citas_ancladas = [a["linea"] for a in anclaje if a["verificada"]]
+                ids_params = [str(v).strip() for v in value["accion"].get("params", {}).values() if _PATRON_IDENTIFICADOR.fullmatch(str(v).strip())]
+                ids_en_ancladas = all(pid in " ".join(citas_ancladas) for pid in ids_params)
+                if not ids_en_ancladas:
+                    value["accion"] = None
+                    value["viabilidad"] = "requiere_mas_datos"
+                    value["accion_descartada"] = "La evidencia no ancla contra el volcado y los identificadores de la acción no están respaldados por citas verificadas."
         else:
             value["evidencia_verificada"] = anclaje
     if value.get("accion") is not None:
