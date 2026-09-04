@@ -159,3 +159,17 @@ nada, en vez de inventar un sello.
 Refactor mínimo declarado: `_normalizar` y `_evidencia_anclada` se movieron
 arriba de `validate_triage` para que estén definidas donde se usan. Contenido
 sin tocar.
+
+## N-06 · Patrón de identificadores · 08:25
+Estado: HECHA
+Commit: (el anterior a este)
+Autor: relevo (Claude) — SIN REVISIÓN INDEPENDIENTE
+Qué cambió: el patrón es case-insensitive y enumera los ocho prefijos que acuña
+la clase `Ids` del generador (ALRT, TRX, SES, CRED, DEP, CTA, PED, HOST).
+Antes cubría cuatro y `HOST-12` fallaba por mayúsculas.
+Verificación: compuerta verde, 187 tests (+5), uno por formato.
+Nota: se enumeran los prefijos en vez de aceptar cualquier `XXX-123`.
+Sub-detectar es preferible: un identificador que se escapa pierde una
+comprobación; un patrón demasiado amplio rechaza acciones legítimas y rompe la
+corrida. Hay un test que fija que "Credential stuffing horizontal", "checkout" y
+"24" NO cuentan — ese es el que protege contra ensancharlo de más.
