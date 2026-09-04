@@ -168,8 +168,8 @@ def construir_linaje(
     volcado_texto = normalizar(
         " ".join(
             linea
-            for lineas in canales.values()
-            if lineas
+            for clave, lineas in canales.items()
+            if lineas and not clave.startswith("_")
             for linea in lineas
         )
     )
@@ -353,7 +353,7 @@ def construir_ruido(
         if a["falso_positivo"]
     ]
     descartados = (triage or {}).get("descartados", [])
-    lineas_totales = sum(len(l) for l in canales.values() if l)
+    lineas_totales = sum(len(l) for k, l in canales.items() if l and not k.startswith("_"))
     return {
         "lineas_recogidas": lineas_totales,
         "detecciones_totales": len(detecciones),

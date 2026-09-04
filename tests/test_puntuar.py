@@ -122,6 +122,78 @@ class PlazoDelPuenteTests(unittest.TestCase):
         # La red de seguridad tiene que estar POR ENCIMA del presupuesto del
         # orquestador (300s): si estuviera por debajo, cortaria corridas sanas.
         self.assertGreater(puente.CORRIDA_MAX_SEG, 300.0)
-        # Y el maximo entre lecturas, muy por debajo: un stream vivo manda algo
-        # mucho antes de dos minutos.
         self.assertLess(puente.LECTURA_MAX_SEG, puente.CORRIDA_MAX_SEG)
+        # Y por ENCIMA de una llamada completa al modelo: entre `ingesta` y
+        # `triage` no viaja nada durante todo lo que tarde el triage. Con 120s
+        # el puente abortaba corridas sanas — medido.
+        self.assertGreater(puente.LECTURA_MAX_SEG, 180.0,
+                           "por debajo de una llamada al modelo corta streams vivos")
+
+
+class LoteAcotadoTests(unittest.TestCase):
+    """El lote acota cuantos incidentes entran en una corrida.
+
+    Medido con glm-5.2: 1 incidente -> corrida completa en 147s y 100% del
+    embudo; 3 o mas -> el triage solo revienta el techo de 180s por llamada y se
+    pierde todo. El coste lo manda la SALIDA (cada incidente obliga a generar
+    titulo, tipo, severidad, evidencia y ruteo), asi que sin tope el tiempo de
+    respuesta crece con cuantos incidentes haya vivos.
+    """
+
+    def test_las_claves_internas_no_entran_al_volcado(self):
+        """Llevan ids del bus: si llegaran al agente seria filtrarle la verdad."""
+        puente = cargar("puente", RAIZ / "projects" / "agente-puente" / "puente.py")
+        volcado = puente.armar_volcado({
+            "monitoreo": ["MONITOREO 10:00 alert=ALRT-1 status=500"],
+            "_diferidos_por_lote": ["INC-07", "INC-08"],
+        })
+        self.assertIn("ALRT-1", volcado)
+        self.assertNotIn("INC-07", volcado)
+        self.assertNotIn("_diferidos", volcado)
+
+    def test_la_trazabilidad_tampoco_cuenta_las_claves_internas(self):
+        canales = {"monitoreo": ["una linea"], "_diferidos_por_lote": ["INC-07"]}
+        ruido = tz.construir_ruido({"incidentes": []}, None, canales)
+        self.assertEqual(ruido["lineas_recogidas"], 1, "solo cuenta canales reales")
+
+    def test_el_tope_es_configurable_y_tiene_un_valor_sensato(self):
+        puente = cargar("puente", RAIZ / "projects" / "agente-puente" / "puente.py")
+        self.assertGreaterEqual(puente.INCIDENTES_POR_LOTE, 1)
+        self.assertLessEqual(puente.INCIDENTES_POR_LOTE, 3,
+                             "por encima de 3 el triage no entra en el presupuesto")
+
+
+class VolcadoAcotadoTests(unittest.TestCase):
+    """El volcado se acota por recencia. Sin tope crece mientras el stack vive.
+
+    Medido con glm-5.2, mismo sistema y misma cantidad de incidentes:
+        volcado de 14 lineas -> corrida completa en 147s, 100% del embudo
+        volcado de 76 lineas -> el triage solo revienta el techo de 180s
+    Lo unico que cambio fue cuanta charla habia acumulada en el dev-chat y los
+    logs, que se llenan solos con el tiempo.
+    """
+
+    def setUp(self):
+        self.puente = cargar("puente", RAIZ / "projects" / "agente-puente" / "puente.py")
+
+    def test_se_queda_con_las_mas_recientes(self):
+        lineas = [f"10:00:0{i} mensaje {i}" for i in range(9)]
+        self.assertEqual(self.puente._ultimas(lineas, 3),
+                         ["10:00:06 mensaje 6", "10:00:07 mensaje 7", "10:00:08 mensaje 8"])
+
+    def test_deduplica_por_contenido_ignorando_la_hora(self):
+        """La consola repite la misma linea de evidencia con horas distintas."""
+        lineas = ["10:00:01 Incidencia detectada", "10:00:05 Incidencia detectada",
+                  "10:00:09 Incidencia detectada", "10:00:12 alert=ALRT-1 status=500"]
+        resultado = self.puente._ultimas(lineas, 10)
+        self.assertEqual(len(resultado), 2, "tres copias iguales cuentan como una")
+        self.assertIn("10:00:12 alert=ALRT-1 status=500", resultado)
+
+    def test_no_recorta_lo_que_ya_entra(self):
+        lineas = ["10:00:01 a" * 1, "10:00:02 b"]
+        self.assertEqual(len(self.puente._ultimas(lineas, 50)), 2)
+
+    def test_los_topes_son_configurables_y_acotados(self):
+        self.assertGreaterEqual(self.puente.MAX_LINEAS_CHAT, 5)
+        self.assertLessEqual(self.puente.MAX_LINEAS_CHAT, 40)
+        self.assertGreaterEqual(self.puente.MAX_LINEAS_LOGS, 5)

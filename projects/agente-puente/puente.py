@@ -42,12 +42,49 @@ AGENTE_URL = os.environ.get("AGENTE_URL", "http://localhost:8080")
 # se deja margen para el resto del cuerpo JSON.
 MAX_BYTES_VOLCADO = 56 * 1024
 
+# Cuantos incidentes entran en una corrida. Ver `_monitoreo_acotado` para el
+# porque, que sale de mediciones y no de una preferencia.
+INCIDENTES_POR_LOTE = int(os.environ.get("INCIDENTES_POR_LOTE", "2"))
+
+# Cuantas lineas se toman de los canales conversacionales. El dev-chat y los
+# logs se ACUMULAN mientras el stack esta vivo, asi que sin tope el volcado
+# crece sin parar y con el, el tiempo del triage. Medido con glm-5.2:
+#
+#     volcado de 14 lineas -> corrida completa en 147s, 100% del embudo
+#     volcado de 76 lineas -> el triage solo revienta el techo de 180s
+#
+# Las mismas dos partes del sistema, la misma cantidad de incidentes: lo unico
+# que cambio fue cuanta charla habia acumulada. Se toman las MAS RECIENTES, que
+# es donde esta el incidente vivo.
+MAX_LINEAS_CHAT = int(os.environ.get("MAX_LINEAS_CHAT", "18"))
+MAX_LINEAS_LOGS = int(os.environ.get("MAX_LINEAS_LOGS", "14"))
+
+
+def _ultimas(lineas: list[str], tope: int) -> list[str]:
+    """Las `tope` mas recientes, sin repetidas. Deduplicar es gratis y limpio:
+    la consola de logs repite la misma linea de evidencia varias veces."""
+    vistas: set[str] = set()
+    unicas: list[str] = []
+    for linea in reversed(lineas):
+        cuerpo = linea[9:] if len(linea) > 9 else linea   # sin el HH:MM:SS
+        if cuerpo in vistas:
+            continue
+        vistas.add(cuerpo)
+        unicas.append(linea)
+        if len(unicas) >= tope:
+            break
+    return list(reversed(unicas))
+
 # Plazo de reloj para una corrida entera, visto desde el puente. Va por encima
 # del presupuesto del orquestador (300s) a proposito: es la red de seguridad por
 # si el agente no cierra el stream, no el limite que gobierna la corrida.
 CORRIDA_MAX_SEG = 420.0
-# Maximo entre dos lecturas del socket. Un stream sano manda algo mucho antes.
-LECTURA_MAX_SEG = 120.0
+# Maximo entre dos lecturas del socket. Tiene que ser MAYOR que una llamada
+# completa al modelo: entre el evento `ingesta` y el `triage` no viaja nada
+# durante todo lo que tarde el triage, que con glm-5.2 son 150-180s. Poner esto
+# por debajo corta streams sanos — medido: con 120s el puente abortaba corridas
+# que estaban funcionando bien.
+LECTURA_MAX_SEG = 240.0
 
 # El volcado son datos a analizar, nunca instrucciones. La clausula va explicita
 # porque el texto viene de un chat donde cualquiera escribe lo que quiera.
@@ -72,37 +109,82 @@ def _get(url: str, headers: dict | None = None) -> dict | None:
         return None
 
 
+def _monitoreo_acotado() -> tuple[list | None, list[str]]:
+    """Lineas de monitoreo de los INCIDENTES_POR_LOTE mas recientes.
+
+    Por que existe este tope, medido y no supuesto: el coste del triage lo manda
+    la SALIDA, no la entrada. Cada incidente obliga al modelo a generar titulo,
+    tipo, severidad, evidencia, especialistas y motivo de ruteo, y generar es lo
+    que tarda. Con glm-5.2:
+
+        1 incidente  -> corrida completa en 147s, 100% del embudo
+        3 incidentes -> el triage solo revienta el techo de 180s por llamada
+        4 incidentes -> idem, y se pierde la corrida entera
+
+    O sea que sin tope el sistema no tiene un tiempo de respuesta acotado: crece
+    con cuantos incidentes haya vivos, que es justo lo que un respondedor de
+    incidentes no puede permitirse.
+
+    El criterio de seleccion es la RECENCIA, no una clasificacion: elegir por
+    "cual parece mas grave" seria hacerle el triage al agente, que es
+    precisamente lo que se esta midiendo. Lo que queda fuera no se oculta — sus
+    lineas no entran al volcado y la trazabilidad lo reporta como perdido en
+    recoleccion, que es exactamente lo que paso.
+    """
+    activos = _get(f"{BUS_URL}/api/incidentes/activos")
+    if activos is None:
+        return None, []
+    incidentes = sorted(activos.get("incidentes", []),
+                        key=lambda i: i.get("inicio", ""), reverse=True)
+    del_lote = incidentes[:INCIDENTES_POR_LOTE]
+    diferidos = [i["incidente_id"] for i in incidentes[INCIDENTES_POR_LOTE:]]
+
+    lineas = []
+    for incidente in del_lote:
+        for linea in incidente.get("lineas", []):
+            lineas.append(f"MONITOREO {linea['timestamp'][11:19]} {linea['texto']}")
+    # El feed marca `reportado_en`; se llama igual para no romper esa contabilidad.
+    _get(f"{BUS_URL}/api/feed/monitoreo")
+    return lineas, diferidos
+
+
 def recoger_evidencia() -> dict:
     """Lee los tres canales. Un canal caido no rompe la corrida: se declara como
     no disponible, que es informacion util y no un fallo silencioso."""
     canales = {}
 
-    monitoreo = _get(f"{BUS_URL}/api/feed/monitoreo")
-    canales["monitoreo"] = monitoreo["lineas"] if monitoreo else None
+    lineas, diferidos = _monitoreo_acotado()
+    canales["monitoreo"] = lineas
+    canales["_diferidos_por_lote"] = diferidos or None
 
     chat = _get(f"{DEVCHAT_URL}/api/history?limit=40",
                 {"Authorization": f"Bearer {DEVCHAT_TOKEN}"})
     canales["dev-chat"] = (
-        [f"{m['timestamp'][11:19]} {m['canal']} @{m['autor']}: {m['texto']}"
-         for m in chat["messages"]] if chat else None
+        _ultimas([f"{m['timestamp'][11:19]} {m['canal']} @{m['autor']}: {m['texto']}"
+                  for m in chat["messages"]], MAX_LINEAS_CHAT) if chat else None
     )
 
     logs = _get(f"{METRICAS_URL}/api/logs/stream")
     if logs is None:
         canales["logs"] = None
     else:
-        canales["logs"] = [
+        canales["logs"] = _ultimas([
             f"{l['timestamp'][11:19]} {l['level']} {l['message']}"
             for l in logs
             if l.get("audit", {}).get("event") in
             ("INCIDENT_EVIDENCE", "SERVICE_DEGRADED", "UX_INCIDENT", "HTTP_INCIDENT")
-        ]
+        ], MAX_LINEAS_LOGS)
     return canales
 
 
 def armar_volcado(canales: dict) -> str:
     partes = [PREFACIO]
+    # Las claves con guion bajo son contabilidad del puente (que incidentes
+    # quedaron fuera del lote). NO pueden entrar al volcado: llevan ids del bus,
+    # y el agente jamas debe ver nada que venga del groundtruth.
     for canal, lineas in canales.items():
+        if canal.startswith("_"):
+            continue
         partes.append(f"\n=== CANAL: {canal} ===")
         if lineas is None:
             partes.append("(canal no disponible en esta corrida)")
