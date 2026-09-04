@@ -21,7 +21,7 @@ MAX_INCIDENTS = 6
 MAX_SPECIALISTS = 2
 MAX_CALLS = 8
 MAX_PARALLEL = 3
-PRESUPUESTO_CORRIDA_SEG = 150.0
+PRESUPUESTO_CORRIDA_SEG = 300.0
 ACTION_CATALOG = {
     "cerrar_alerta_falsa": ("bajo", False), "anotar_incidente": ("bajo", False),
     "bloquear_ip": ("medio", True), "revocar_sesion": ("medio", True),

@@ -22,8 +22,7 @@ const SEVERITIES = ["critica", "alta", "media", "baja"];
 const taskNodes = new Map();
 const budgetFill = document.querySelector("#budget-fill");
 const budgetText = document.querySelector("#budget-text");
-const BUDGET_SECONDS = 150;
-let budgetTimer = null;
+let BUDGET_SECONDS = 300; let budgetTimer = null;
 
 function setMode(mode) {
   modeBadge.textContent = mode === "live" ? "LIVE · Huawei MaaS" : "MOCK · Sin consumo cloud";
@@ -322,6 +321,7 @@ async function loadHealth() {
     setMode(health.mode);
     metric.mode.textContent = health.mode;
     metric.model.textContent = health.model;
+    if (health.presupuesto_seg) BUDGET_SECONDS = health.presupuesto_seg;
   } catch {
     modeBadge.textContent = "Servicio no disponible";
   }
