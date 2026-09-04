@@ -180,7 +180,30 @@ def _complete(provider: ChatProvider, messages: list[dict[str, str]]) -> tuple[s
         elif event.get("type") == "done": meta = event
     return "".join(chunks), meta
 
-def validate_triage(value: Any) -> dict[str, Any]:
+def _normalizar(texto: str) -> str:
+    return " ".join(texto.split())
+
+def _evidencia_anclada(evidencia: list[str], volcado: str) -> list[dict[str, Any]]:
+    """Cada string de evidencia debe aparecer en el volcado (normalizando espacios).
+
+    Devuelve una lista de {linea, verificada} para que app.js pueda pintar el sello.
+    """
+    volcado_norm = _normalizar(volcado)
+    resultado: list[dict[str, Any]] = []
+    for linea in evidencia:
+        linea_norm = _normalizar(str(linea))
+        verificada = bool(linea_norm) and linea_norm in volcado_norm
+        resultado.append({"linea": linea, "verificada": verificada})
+    return resultado
+
+def validate_triage(value: Any, volcado: str = "") -> dict[str, Any]:
+    """`volcado` activa el anclaje literal de la evidencia del triage.
+
+    Sin esto, la mitad de la evidencia que se muestra en :8080 —la de los
+    incidentes detectados— no estaba contrastada contra nada, mientras que la de
+    los hallazgos sí llevaba sello. Un sello a medias es peor que ninguno:
+    sugiere que todo lo que se ve fue verificado.
+    """
     if not isinstance(value, dict) or value.get("version") != "1" or not isinstance(value.get("incidentes"), list) or not isinstance(value.get("descartados"), list):
         raise ValueError("El triage debe tener version=1, incidentes y descartados.")
     ids: set[str] = set()
@@ -197,23 +220,13 @@ def validate_triage(value: Any) -> dict[str, Any]:
         specialists = incident.get("especialistas")
         if not isinstance(specialists, list) or not 1 <= len(specialists) <= MAX_SPECIALISTS or not set(specialists) <= SPECIALISTS: raise ValueError("especialistas inválidos.")
         if not isinstance(incident.get("motivo_ruteo"), str) or not incident["motivo_ruteo"].strip(): raise ValueError("motivo_ruteo obligatorio.")
+        if volcado:
+            anclaje = _evidencia_anclada(incident["evidencia"], volcado)
+            incident["evidencia_verificada"] = anclaje
+            sin_anclar = [a["linea"] for a in anclaje if not a["verificada"]]
+            if sin_anclar:
+                incident["evidencia_no_verificada"] = sin_anclar
     return value
-
-def _normalizar(texto: str) -> str:
-    return " ".join(texto.split())
-
-def _evidencia_anclada(evidencia: list[str], volcado: str) -> list[dict[str, Any]]:
-    """Cada string de evidencia debe aparecer en el volcado (normalizando espacios).
-
-    Devuelve una lista de {linea, verificada} para que app.js pueda pintar el sello.
-    """
-    volcado_norm = _normalizar(volcado)
-    resultado: list[dict[str, Any]] = []
-    for linea in evidencia:
-        linea_norm = _normalizar(str(linea))
-        verificada = bool(linea_norm) and linea_norm in volcado_norm
-        resultado.append({"linea": linea, "verificada": verificada})
-    return resultado
 
 _PATRON_IDENTIFICADOR = re.compile(r"^(DEP-\d+|TRX-\d+|INC-\d+|ALRT-\d+|\d+\.\d+\.\d+\.\d+|svc-[a-z0-9-]+|host-[a-z0-9-]+|pod-[a-z0-9-]+)$")
 
@@ -356,7 +369,7 @@ class Orchestrator:
         try:
             crudo, triage_meta = call("triage", mensajes_triage, structured=False)
             try:
-                triage = validate_triage(extract_json(crudo))
+                triage = validate_triage(extract_json(crudo), volcado=prompt)
             except ValueError as error:
                 yield {"type": "fase", "fase": "triage", "estado": "reintento", "run_id": run_id, "detalle": str(error)}
                 reintento = mensajes_triage + [
@@ -366,7 +379,7 @@ class Orchestrator:
                     {"role": "user", "content": f"El entregable no sirve: {error}. Devuelve ÚNICAMENTE el JSON válido, sin texto alrededor."},
                 ]
                 crudo, triage_meta = call("triage", reintento, structured=False)
-                triage = validate_triage(extract_json(crudo))
+                triage = validate_triage(extract_json(crudo), volcado=prompt)
         except (ProviderError, ValueError) as error:
             yield {"type": "fase", "fase": "triage", "estado": "fallida", "run_id": run_id, "detalle": str(error)}
             fallida = {
