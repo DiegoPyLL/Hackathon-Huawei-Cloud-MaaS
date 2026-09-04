@@ -23,6 +23,10 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from trazabilidad import trazar  # noqa: E402
 
 # La consola de Windows es cp1252 por defecto y los mensajes del chat traen emoji.
 if hasattr(sys.stdout, "reconfigure"):
@@ -183,6 +187,7 @@ def corrida() -> dict:
         "volcado": volcado,
         "agente": resultado,
         "contraste": contrastar(resultado.get("triage"), verdad),
+        "trazabilidad": trazar(verdad, canales, resultado),
     }
 
 
@@ -283,24 +288,163 @@ def main():
     if c["tipos_inventados"]:
         print(f"  invento (no estaban)      : {c['tipos_inventados']}")
 
+    imprimir_trazabilidad(resultado.get("trazabilidad") or {})
+
     meta = agente.get("meta", {})
     if meta:
         print(f"\n  modo={meta.get('mode')} llamadas={meta.get('llamadas')} "
               f"latencia={meta.get('latency_ms')}ms estado={meta.get('status')}")
 
 
+
+
+def imprimir_trazabilidad(traza: dict):
+    """Secciones 7 a 9: por donde salio cada problema y hasta donde llego."""
+    if not traza:
+        return
+
+    print()
+    print("=" * 72)
+    print("7. TRAZABILIDAD POR PANTALLA — que publico cada canal")
+    print("=" * 72)
+    for fila in traza.get("por_pantalla", []):
+        estado = "" if fila["disponible"] else "  (canal no disponible)"
+        cobertura = f"{fila['cobertura']:.0%}" if fila["cobertura"] is not None else "-"
+        print(f"  :{fila['puerto']:<5} {fila['pantalla']:<28} "
+              f"{fila['lineas_recogidas']:>3} lineas  cobertura {cobertura:>4}{estado}")
+        if fila["incidentes_publicados"]:
+            print(f"          publico     {', '.join(fila['incidentes_publicados'])}")
+        if fila["incidentes_no_publicados"]:
+            print(f"          no publico  {', '.join(fila['incidentes_no_publicados'])}")
+
+    print()
+    print("=" * 72)
+    print("8. LINAJE — cada problema real y hasta donde llego")
+    print("=" * 72)
+    for fila in traza.get("linaje", []):
+        marca = "OK " if fila["perdido_en"] is None else "-> "
+        print(f"  {marca}{fila['incidente_real']}  {fila['tipo_real']:<20} "
+              f"{fila['severidad_real']:<8} {fila['servicio']}")
+        print(f"        emitidas {fila['lineas_emitidas']} lineas por "
+              f"{', '.join(fila['canales_que_lo_publicaron']) or 'ningun canal'}"
+              f"  |  {fila['lineas_en_volcado']} llegaron al volcado")
+        if fila["detectado"]:
+            tipo_ok = "correcto" if fila["tipo_correcto"] else f"dijo {fila['tipo_agente']}"
+            sev_ok = "correcta" if fila["severidad_correcta"] else f"dijo {fila['severidad_agente']}"
+            print(f"        detectado como {fila['detectado_como']}  tipo {tipo_ok}  severidad {sev_ok}")
+            total_citas = fila["citas_ancladas"] + fila["citas_no_ancladas"]
+            print(f"        evidencia anclada {fila['citas_ancladas']}/{total_citas}")
+            ruteo = "correcto" if fila["ruteo_correcto"] else f"esperaba {fila['ruteo_esperado']}"
+            print(f"        ruteo -> {', '.join(fila['especialistas_asignados']) or '-'} ({ruteo})")
+            if fila["diagnosticado"]:
+                print(f"        diagnostico por {', '.join(fila['especialistas_que_respondieron'])} "
+                      f"confianza={fila['confianza']}")
+            if fila["accion_propuesta"]:
+                veredicto = "correcta" if fila["accion_correcta"] else "no es la esperada"
+                print(f"        accion {fila['accion_propuesta']} {fila['params_propuestos']} ({veredicto})")
+            elif fila["accion_esperada"]:
+                print(f"        SIN ACCION — el escenario esperaba {fila['accion_esperada']}")
+        else:
+            print("        NO DETECTADO por el triage")
+        if fila["perdido_en"]:
+            print(f"        se perdio en: {fila['perdido_en']}")
+
+    embudo = traza.get("embudo", {})
+    if embudo:
+        print()
+        print("=" * 72)
+        print("9. CONVERSION — lo que se tiene vs lo que procesa el agente")
+        print("=" * 72)
+        total = embudo["total"]
+        for etapa in embudo["etapas"]:
+            barra = "#" * int(etapa["sobre_total"] * 30)
+            paso = f"  (-{etapa['caida']} en este salto)" if etapa["caida"] else ""
+            print(f"  {etapa['etiqueta']:<38} {etapa['cantidad']:>2}/{total}  "
+                  f"{etapa['sobre_total']:>6.0%}  {barra}{paso}")
+        if embudo.get("perdidas_por_salto"):
+            print("\n  donde se pierden:")
+            for salto, cuantos in sorted(embudo["perdidas_por_salto"].items()):
+                print(f"    {salto:<16} {cuantos}")
+
+    ruido = traza.get("ruido", {})
+    if ruido:
+        precision = f"{ruido['precision']:.0%}" if ruido.get("precision") is not None else "-"
+        print(f"\n  lineas recogidas {ruido['lineas_recogidas']} -> "
+              f"{ruido['detecciones_totales']} detecciones  "
+              f"({ruido['falsos_positivos']} falsos positivos, precision {precision})")
+        print(f"  descartes declarados por el agente: {ruido['descartes_declarados']}")
+
 # --- Modo servicio, para disparar una corrida desde una UI --------------------
+#
+# La pantalla de trazabilidad (:8020) es la unica que ve la verdad y la salida
+# del agente a la vez. El agente sigue ciego: nada de aqui vuelve hacia :8080.
 try:
+    import asyncio
+    import threading
+
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import HTMLResponse
 
     app = FastAPI(title="Puente agente")
     app.add_middleware(CORSMiddleware, allow_origins=["*"],
                        allow_methods=["*"], allow_headers=["*"])
 
+    ESTATICO = Path(__file__).resolve().parent / "static"
+
+    # Una corrida live tarda minutos. El navegador no espera: dispara, sondea y
+    # la ultima corrida terminada queda disponible para quien llegue despues.
+    _ultima: dict = {}
+    _corriendo = threading.Lock()
+
+    def _correr_y_guardar():
+        global _ultima
+        try:
+            resultado = corrida()
+            resultado["estado_corrida"] = "terminada"
+        except Exception as error:  # una corrida rota no puede tumbar el servicio
+            resultado = {"estado_corrida": "fallida", "error": str(error)}
+        finally:
+            _corriendo.release()
+        _ultima = resultado
+
+    @app.get("/", response_class=HTMLResponse)
+    async def index():
+        return (ESTATICO / "index.html").read_text(encoding="utf-8")
+
     @app.post("/api/corrida")
     async def api_corrida():
-        return corrida()
+        """Corrida sincrona: devuelve todo. Util desde curl, lenta desde el navegador."""
+        return await asyncio.to_thread(corrida)
+
+    @app.post("/api/corrida/disparar")
+    async def api_disparar():
+        """Arranca una corrida en segundo plano y vuelve enseguida."""
+        if not _corriendo.acquire(blocking=False):
+            return {"estado": "ya_hay_una_corriendo"}
+        threading.Thread(target=_correr_y_guardar, daemon=True).start()
+        return {"estado": "disparada"}
+
+    @app.get("/api/trazabilidad")
+    async def api_trazabilidad():
+        """Lo que consume la pantalla. Sin corrida previa, devuelve solo la foto
+        de la verdad y de los canales: ya es trazabilidad util."""
+        corriendo = _corriendo.locked()
+        if not _ultima:
+            canales = recoger_evidencia()
+            verdad = _get(f"{BUS_URL}/api/verdad") or {}
+            return {
+                "estado_corrida": "corriendo" if corriendo else "sin_corrida",
+                "trazabilidad": trazar(verdad, canales, {}),
+                "canales_caidos": [c for c, v in canales.items() if v is None],
+            }
+        return {
+            "estado_corrida": "corriendo" if corriendo else _ultima.get("estado_corrida", "terminada"),
+            "trazabilidad": _ultima.get("trazabilidad", {}),
+            "canales_caidos": _ultima.get("canales_caidos", []),
+            "error": _ultima.get("error"),
+            "meta": (_ultima.get("agente") or {}).get("meta", {}),
+        }
 
     @app.get("/api/evidencia")
     async def api_evidencia():

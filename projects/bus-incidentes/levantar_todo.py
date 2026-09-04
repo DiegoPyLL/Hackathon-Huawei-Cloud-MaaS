@@ -12,6 +12,7 @@ Arranca en este orden, porque los de abajo leen de los de arriba:
     8028  semaforo    dashboard de estado + consola de logs
     8001  demo        los 3 canales alimentando al agente en vivo
     8080  Agente 1    Incident Response Agent (analista, solo lectura)
+    8020  trazabilidad  linaje de cada problema y conversion contra la verdad
 
 Ctrl+C corta todo.
 """
@@ -41,6 +42,7 @@ SERVICIOS = [
     ("semaforo", PROJECTS / "Metricas(polling)", ["-m", "uvicorn", "main:app", "--port", "8028"], 8028),
     ("demo", PROJECTS / "devchat-generator" / "demo", ["-m", "uvicorn", "live_server:app", "--port", "8001"], 8001),
     ("agente-1", REPO, ["-m", "src.maas_demo"], 8080),
+    ("trazabilidad", PROJECTS / "agente-puente", ["-m", "uvicorn", "puente:app", "--port", "8020"], 8020),
 ]
 
 
@@ -66,6 +68,7 @@ def main():
         print("  Dev chat          http://localhost:8000")
         print("  Demo del agente   http://localhost:8001")
         print("  Agente 1          http://localhost:8080")
+        print("  Trazabilidad      http://localhost:8020")
         print("  Bus (API)         http://localhost:8010/api/verdad")
         print("\n  Provocar un incidente:")
         print('    curl -X POST http://localhost:8010/api/incidentes/provocar \\')
