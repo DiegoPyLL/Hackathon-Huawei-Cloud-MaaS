@@ -19,3 +19,10 @@ Estado inicial antes de arrancar el bucle:
 - Backlog: 21 tareas, ninguna empezada.
 
 ---
+
+## N-01 · Subir el presupuesto de corrida a 300 s · 00:01
+Estado: HECHA
+Commit: 2ad6925
+Qué cambió: PRESUPUESTO_CORRIDA_SEG 150→300; /api/health expone presupuesto_seg; app.js lo lee de ahí (fallback 300).
+Verificación: compuerta verde, 160 tests (+1).
+Nota: el front ya no hardcodea el presupuesto; lo toma de /api/health.
