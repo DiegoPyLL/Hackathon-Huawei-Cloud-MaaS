@@ -210,19 +210,42 @@ class OrchestratorContractTests(unittest.TestCase):
         self.assertTrue(all(a["verificada"] for a in result["evidencia_verificada"]))
         self.assertNotIn("evidencia_no_verificada", result)
 
+    def test_action_with_invented_deploy_id_is_discarded_and_motivo_in_traza(self):
+        """T5.2: un deploy_id inventado que no esta en la evidencia no llega a la cola."""
+        incident = valid_triage()["incidentes"][0]
+        volcado = "10:15:03 500 GET /checkout alert=ALRT-9001 deploy_id=DEP-451"
+        finding = valid_finding(incident, action={"action_id": "revertir_deploy", "params": {"deploy_id": "DEP-999"}, "justificacion": "x", "verificacion": "y"})
+        finding["evidencia"] = ["alert=ALRT-9001 deploy_id=DEP-451"]
+        result = validate_finding(finding, incident, "sysadmin", volcado=volcado)
+        self.assertIsNone(result["accion"])
+        self.assertIn("DEP-999", result["accion_descartada"])
+        self.assertEqual(result["viabilidad"], "requiere_mas_datos")
+
+    def test_action_with_anchored_deploy_id_is_kept(self):
+        """T5.2: un deploy_id que esta en la evidencia llega a la cola."""
+        incident = valid_triage()["incidentes"][0]
+        volcado = "10:15:03 deploy_id=DEP-451 alert=ALRT-9001"
+        finding = valid_finding(incident, action={"action_id": "revertir_deploy", "params": {"deploy_id": "DEP-451"}, "justificacion": "x", "verificacion": "y"})
+        finding["evidencia"] = ["deploy_id=DEP-451 alert=ALRT-9001"]
+        result = validate_finding(finding, incident, "sysadmin", volcado=volcado)
+        self.assertIsNotNone(result["accion"])
+        self.assertNotIn("accion_descartada", result)
+
     def test_full_pipeline_creates_human_approval_and_persists_run(self):
         config = Config(mode="mock", api_key=None, base_url="https://unused", model="m")
         triage = valid_triage(active=True)
         action = {"action_id": "bloquear_ip", "params": {"ip": "203.0.113.5"}}
         incident = triage["incidentes"][0]
+        finding = valid_finding(incident, action=action)
+        finding["evidencia"] = ["alert=ALRT-1 203.0.113.5"]
 
         class Controlled(Orchestrator):
             def _provider(self, phase):
-                value = triage if phase == "triage" else valid_finding(incident, action=action) if phase == "especialista" else "Reporte final"
+                value = triage if phase == "triage" else finding if phase == "especialista" else "Reporte final"
                 return type("P", (), {"stream": lambda self, messages: event_stream(value, mode="mock")})()
 
         orchestrator = Controlled(config)
-        events = list(orchestrator.stream({"canal": "monitoreo", "prompt": "alert=ALRT-1 evidencia"}))
+        events = list(orchestrator.stream({"canal": "monitoreo", "prompt": "alert=ALRT-1 203.0.113.5 evidencia"}))
         done = events[-1]
         result = orchestrator.store.get(done["run_id"])
         self.assertEqual(done["status"], "completada")
