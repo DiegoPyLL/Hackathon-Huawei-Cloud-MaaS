@@ -26,7 +26,7 @@ demostrar.
   fija que el front y el back declaran el mismo presupuesto o que el front lo
   lee de `/api/health`.
 
-- [ ] **N-02 · Corrida live de control, una sola vez**
+- [x] **N-02 · Corrida live de control, una sola vez**
   Sin cambios de código. **Única excepción a la prohibición de `live`.**
   Levantá el stack (`python projects/bus-incidentes/levantar_todo.py`), provocá
   3 escenarios distintos, dispará una corrida por el puente y guardá la salida
