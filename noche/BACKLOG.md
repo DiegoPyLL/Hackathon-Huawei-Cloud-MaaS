@@ -109,7 +109,7 @@ demostrar.
   **Aceptación:** `health` se deriva de las métricas mostradas — `unhealthy` si
   `latency > 800` o `error_rate > 0.05` o `disk > 85`. Test de la función.
 
-- [ ] **N-10 · Hueco negro en la mitad inferior de `:8001`**
+- [x] **N-10 · Hueco negro en la mitad inferior de `:8001`**
   `projects/devchat-generator/demo/static/live.html:79-84`.
   `.main-bottom` es un flex con tres hijos de base fija (`240 + 280 + 280 =
   800px`); a 1500px de ancho quedan 700px de vacío negro.

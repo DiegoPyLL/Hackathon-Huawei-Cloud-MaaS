@@ -203,3 +203,12 @@ Qué cambió: _derivar_health(metrics) deriva health de las métricas mostradas
 Verificación: compuerta verde, 205 tests (+5).
 Nota: las alertas firing ya actualizan las métricas, y health se recalcula
 después. Un servicio con métricas sanas pero alerta firing ya no se ve rojo.
+
+## N-10 · Hueco negro en :8001 · 09:20
+Estado: HECHA
+Commit: 76d0b3b
+Qué cambió: .main-bottom pasa de flex a grid 240px 1fr 1fr. Los dos paneles
+finales se reparten el espacio restante. .agent-row pierde flex: 0 0 280px.
+Verificación: compuerta verde, 205 tests.
+Nota: no se verificó con captura headless de Chrome (no disponible). El grid
+1fr 1fr garantiza que no quede vacío a ningún ancho.
