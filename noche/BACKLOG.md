@@ -38,7 +38,7 @@ demostrar.
   `:8020`. Si sale `parcial` otra vez, anotá el motivo y seguí — no subas más
   el presupuesto por tu cuenta.
 
-- [ ] **N-03 · `contrastar()` delega en la trazabilidad**
+- [x] **N-03 · `contrastar()` delega en la trazabilidad**
   `projects/agente-puente/puente.py` (`contrastar`), `projects/agente-puente/trazabilidad.py`.
   `contrastar()` sigue comparando **conjuntos de tipos**: acertar el tipo de otro
   incidente cuenta como acierto y detectar el correcto con otro nombre cuenta

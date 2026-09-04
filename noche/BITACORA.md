@@ -111,3 +111,17 @@ las trazas y va como R-14: el triage consume 170.7s de los 300 en UNA llamada,
 así que a los especialistas les quedan ~130s y a la consolidación nada.
 Trazas: triage 170668ms · especialistas 35522/50165/60369/61181/46835ms.
 Ojo: `llamadas` reportó 8 y las trazas son 6 — segunda confirmación de R-01.
+
+## N-03 · contrastar() delega en la trazabilidad · 07:05
+Estado: HECHA
+Commit: (el anterior a este)
+Autor: relevo (Claude) — SIN REVISIÓN INDEPENDIENTE
+Qué cambió: `puntuar()` nuevo en trazabilidad.py; `contrastar()` lo usa y
+devuelve precision, recall, f1, exactitud de tipo/severidad/ruteo y
+accion_correcta, todo desde la atribución por evidencia. La sección 6 del CLI
+las imprime. La comparación vieja por conjuntos de tipos se conserva pero queda
+declarada como lo que es: legible, pero no la puntuación.
+Verificación: compuerta verde, 172 tests (+6). Además smoke test del cableado
+real de `contrastar()`, no solo del scorer aislado.
+Nota: las tasas sin universo devuelven None, no 0.0. Un cero sobre cero casos
+dice "falló todo" donde lo correcto es "no había nada que acertar".
