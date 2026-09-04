@@ -125,3 +125,22 @@ Verificación: compuerta verde, 172 tests (+6). Además smoke test del cableado
 real de `contrastar()`, no solo del scorer aislado.
 Nota: las tasas sin universo devuelven None, no 0.0. Un cero sobre cero casos
 dice "falló todo" donde lo correcto es "no había nada que acertar".
+
+## N-04 · puntuar.py — puntuación repetible · 07:35
+Estado: HECHA
+Commit: (el anterior a este)
+Autor: relevo (Claude) — SIN REVISIÓN INDEPENDIENTE
+Qué cambió: `scripts/ejecutablesBase/puntuar.py` nuevo. Provoca N escenarios,
+corre uno por cada uno y agrega las métricas de N-03 en una tabla.
+Verificación: compuerta verde, 178 tests (+6). Y probado de punta a punta contra
+un stack en mock, sin tocar la nube.
+Resultado del smoke: 3 escenarios, 9 incidentes, TOTAL 0% en todo. Es correcto —
+el MockProvider devuelve evidencia genérica que no ancla contra ninguna línea
+real, así que no detecta nada. El scorer lo reporta en vez de maquillarlo, y deja
+a la vista por qué N-14 importa.
+Notas de diseño: el TOTAL se recalcula sobre todos los incidentes en vez de
+promediar las filas (promediar porcentajes de denominadores distintos miente),
+y una corrida fallida no entra en el TOTAL. Ambas cosas con test.
+Limitación documentada: el bus no tiene reset, así que la fila N ve también los
+incidentes vivos de las filas anteriores. Cada fila se etiqueta con el escenario
+que la disparó pero puntúa contra todo lo activo, que es lo que el agente vio.
