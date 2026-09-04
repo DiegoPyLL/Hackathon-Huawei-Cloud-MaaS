@@ -80,7 +80,7 @@ demostrar.
   es preferible a sobre-detectar, así que no metas patrones tan amplios que
   empiecen a marcar palabras normales.
 
-- [ ] **N-07 · Decidir el umbral de anclaje de acciones**
+- [x] **N-07 · Decidir el umbral de anclaje de acciones**
   `src/maas_demo/orchestrator.py` (`validate_finding`).
   Hoy la acción se anula solo si **toda** la evidencia falla el anclaje
   (`len(no_verificadas) == len(anclaje)`). Si el especialista cita 3 líneas y se

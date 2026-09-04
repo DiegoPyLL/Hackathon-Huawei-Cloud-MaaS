@@ -173,3 +173,15 @@ Sub-detectar es preferible: un identificador que se escapa pierde una
 comprobación; un patrón demasiado amplio rechaza acciones legítimas y rompe la
 corrida. Hay un test que fija que "Credential stuffing horizontal", "checkout" y
 "24" NO cuentan — ese es el que protege contra ensancharlo de más.
+
+## N-07 · Decidir el umbral de anclaje de acciones · 08:40
+Estado: HECHA
+Commit: c386016
+Qué cambió: validate_finding ahora anula la acción si **alguna** cita no ancla,
+salvo que todos los IDs de params aparezcan en las citas **sí** ancladas. Antes
+solo anulaba si TODA la evidencia fallaba. Criterio documentado en docstring.
+Verificación: compuerta verde, 199 tests (+2).
+Nota: conservativo — prefiere bloquear una acción dudosa antes que dejar pasar
+una acción con evidencia inventada. La excepción (cita irrelevante) evita
+falsos negativos cuando el especialista cita de más pero los IDs que usa están
+respaldados.
