@@ -187,6 +187,29 @@ class OrchestratorContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "acción"):
             validate_finding(weak, incident, "sysadmin")
 
+    def test_finding_with_unanchored_evidence_is_marked_and_blocks_action(self):
+        """T5.1: evidencia que no esta en el volcado queda no verificada y sin accion."""
+        incident = valid_triage()["incidentes"][0]
+        volcado = "10:15:03 500 GET /checkout alert=ALRT-9001 deploy_id=DEP-451"
+        finding = valid_finding(incident, action={"action_id": "revertir_deploy", "params": {"deploy_id": "DEP-451"}, "justificacion": "x", "verificacion": "y"})
+        finding["evidencia"] = ["linea inventada que no esta en el volcado"]
+        finding["confianza"] = "alta"
+        result = validate_finding(finding, incident, "sysadmin", volcado=volcado)
+        self.assertIn("evidencia_no_verificada", result)
+        self.assertEqual(result["evidencia_no_verificada"], ["linea inventada que no esta en el volcado"])
+        self.assertEqual(result["confianza"], "media")
+        self.assertIsNone(result["accion"])
+
+    def test_finding_with_anchored_evidence_gets_sello(self):
+        """T5.1: evidencia que esta en el volcado queda verificada."""
+        incident = valid_triage()["incidentes"][0]
+        volcado = "10:15:03 500 GET /checkout alert=ALRT-9001 deploy_id=DEP-451"
+        finding = valid_finding(incident, action={"action_id": "revertir_deploy", "params": {"deploy_id": "DEP-451"}, "justificacion": "x", "verificacion": "y"})
+        finding["evidencia"] = ["alert=ALRT-9001"]
+        result = validate_finding(finding, incident, "sysadmin", volcado=volcado)
+        self.assertTrue(all(a["verificada"] for a in result["evidencia_verificada"]))
+        self.assertNotIn("evidencia_no_verificada", result)
+
     def test_full_pipeline_creates_human_approval_and_persists_run(self):
         config = Config(mode="mock", api_key=None, base_url="https://unused", model="m")
         triage = valid_triage(active=True)
@@ -199,7 +222,7 @@ class OrchestratorContractTests(unittest.TestCase):
                 return type("P", (), {"stream": lambda self, messages: event_stream(value, mode="mock")})()
 
         orchestrator = Controlled(config)
-        events = list(orchestrator.stream({"canal": "monitoreo", "prompt": "evidencia"}))
+        events = list(orchestrator.stream({"canal": "monitoreo", "prompt": "alert=ALRT-1 evidencia"}))
         done = events[-1]
         result = orchestrator.store.get(done["run_id"])
         self.assertEqual(done["status"], "completada")

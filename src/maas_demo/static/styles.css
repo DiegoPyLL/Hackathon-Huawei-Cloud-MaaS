@@ -100,6 +100,8 @@ h3 { margin: 0 0 12px; font-size: 0.82rem; text-transform: uppercase; letter-spa
 .tag[data-kind="confianza"] { color: #ffd479; border-color: #705822; }
 .evidence { margin: 10px 0 0; padding-left: 18px; color: #cfd5df; font-size: 0.86rem; }
 .evidence li { margin: 3px 0; }
+.evidence-sello { display: inline-block; margin-left: 8px; font-size: 0.72rem; color: #72e2a4; }
+.evidence-sello:empty { display: none; }
 
 .tasks { list-style: none; display: grid; gap: 8px; margin: 0; padding: 0; }
 .task { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 0.86rem; }

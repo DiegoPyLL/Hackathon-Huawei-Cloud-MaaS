@@ -73,9 +73,16 @@ function tag(text, kind) {
   return node;
 }
 
-function evidenceList(items) {
+function evidenceList(items, verificadas) {
   const list = element("ul", "evidence");
-  (items || []).forEach((item) => list.append(element("li", null, item)));
+  (items || []).forEach((item, idx) => {
+    const li = element("li", null, item);
+    if (verificadas && verificadas[idx]) {
+      const sello = element("span", "evidence-sello", verificadas[idx].verificada ? "✓ verificada contra el volcado" : "✗ no verificada");
+      li.append(sello);
+    }
+    list.append(li);
+  });
   return list;
 }
 
@@ -154,7 +161,7 @@ function renderFinding(finding) {
     card.append(element("p", "error-text", finding.error || "El especialista falló."));
   } else {
     card.append(element("p", null, finding.causa_raiz || "Sin causa raíz propuesta."));
-    card.append(evidenceList(finding.evidencia));
+    card.append(evidenceList(finding.evidencia, finding.evidencia_verificada));
     if (finding.descartado && finding.descartado.length) {
       const descartadoList = element("ul", "evidence descartado");
       finding.descartado.forEach((item) => {

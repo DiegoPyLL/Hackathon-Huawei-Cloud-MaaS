@@ -197,7 +197,23 @@ def validate_triage(value: Any) -> dict[str, Any]:
         if not isinstance(incident.get("motivo_ruteo"), str) or not incident["motivo_ruteo"].strip(): raise ValueError("motivo_ruteo obligatorio.")
     return value
 
-def validate_finding(value: Any, incident: dict[str, Any], specialist: str) -> dict[str, Any]:
+def _normalizar(texto: str) -> str:
+    return " ".join(texto.split())
+
+def _evidencia_anclada(evidencia: list[str], volcado: str) -> list[dict[str, Any]]:
+    """Cada string de evidencia debe aparecer en el volcado (normalizando espacios).
+
+    Devuelve una lista de {linea, verificada} para que app.js pueda pintar el sello.
+    """
+    volcado_norm = _normalizar(volcado)
+    resultado: list[dict[str, Any]] = []
+    for linea in evidencia:
+        linea_norm = _normalizar(str(linea))
+        verificada = bool(linea_norm) and linea_norm in volcado_norm
+        resultado.append({"linea": linea, "verificada": verificada})
+    return resultado
+
+def validate_finding(value: Any, incident: dict[str, Any], specialist: str, volcado: str = "") -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("version") != "1": raise ValueError("Hallazgo sin version=1.")
     if value.get("incidente_id") != incident["id"] or value.get("especialista") != specialist: raise ValueError("Hallazgo no coincide con la tarea.")
     if value.get("confianza") not in {"alta", "media", "baja", "insuficiente"}: raise ValueError("confianza inválida.")
@@ -211,6 +227,23 @@ def validate_finding(value: Any, incident: dict[str, Any], specialist: str) -> d
             raise ValueError("action_id no pertenece al catálogo cerrado.")
         if not isinstance(action.get("params"), dict):
             raise ValueError("accion.params debe ser un objeto.")
+    if volcado:
+        anclaje = _evidencia_anclada(value["evidencia"], volcado)
+        no_verificadas = [a for a in anclaje if not a["verificada"]]
+        if no_verificadas:
+            value["evidencia_verificada"] = anclaje
+            value["evidencia_no_verificada"] = [a["linea"] for a in no_verificadas]
+            confianza = value.get("confianza", "baja")
+            if confianza == "alta":
+                value["confianza"] = "media"
+            elif confianza == "media":
+                value["confianza"] = "baja"
+            if value.get("accion") is not None and len(no_verificadas) == len(anclaje):
+                value["accion"] = None
+                value["viabilidad"] = "requiere_mas_datos"
+                value["accion_descartada"] = "La evidencia no ancla contra el volcado."
+        else:
+            value["evidencia_verificada"] = anclaje
     return value
 
 def build_tasks(triage: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -309,7 +342,7 @@ class Orchestrator:
             messages = [{"role": "system", "content": SPECIALIST_PROMPTS[specialist]}, {"role": "user", "content": "INCIDENTE_JSON:" + json.dumps(incident, ensure_ascii=False)}]
             try:
                 value, _ = call("especialista", messages)
-                return validate_finding(value, incident, specialist) | {"_start": yield_event}
+                return validate_finding(value, incident, specialist, volcado=prompt) | {"_start": yield_event}
             except Exception as error:
                 return {"version": "1", "incidente_id": incident["id"], "especialista": specialist, "estado": "fallido", "error": str(error), "_start": yield_event}
         pool = ThreadPoolExecutor(max_workers=MAX_PARALLEL)
