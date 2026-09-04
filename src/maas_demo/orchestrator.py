@@ -466,8 +466,18 @@ class Orchestrator:
             yield_event = {"type": "tarea", "run_id": run_id, "incidente_id": incident["id"], "especialista": specialist, "estado": "iniciada"}
             messages = [{"role": "system", "content": SPECIALIST_PROMPTS[specialist]}, {"role": "user", "content": "INCIDENTE_JSON:" + json.dumps(incident, ensure_ascii=False)}]
             try:
-                value, _ = call("especialista", messages)
-                return validate_finding(value, incident, specialist, volcado=prompt) | {"_start": yield_event}
+                crudo, _ = call("especialista", messages, structured=False)
+                try:
+                    value = extract_json(crudo)
+                    return validate_finding(value, incident, specialist, volcado=prompt) | {"_start": yield_event}
+                except ValueError as error:
+                    reintento = messages + [
+                        {"role": "assistant", "content": crudo[:MAX_ECO_REINTENTO]},
+                        {"role": "user", "content": f"El entregable no sirve: {error}. Devuelve ÚNICAMENTE el JSON válido, sin texto alrededor."},
+                    ]
+                    crudo, _ = call("especialista", reintento, structured=False)
+                    value = extract_json(crudo)
+                    return validate_finding(value, incident, specialist, volcado=prompt) | {"_start": yield_event}
             except Exception as error:
                 return {"version": "1", "incidente_id": incident["id"], "especialista": specialist, "estado": "fallido", "error": str(error), "_start": yield_event}
         pool = ThreadPoolExecutor(max_workers=MAX_PARALLEL)

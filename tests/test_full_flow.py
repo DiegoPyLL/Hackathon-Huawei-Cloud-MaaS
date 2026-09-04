@@ -302,6 +302,40 @@ class OrchestratorContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "prompt"):
             list(Orchestrator(config).stream({"prompt": "  "}))
 
+    def test_specialist_retries_once_on_invalid_json(self):
+        """N-08: un especialista que devuelve JSON inválido la primera vez y válido
+        la segunda produce un hallazgo completado, no fallido."""
+        config = Config(mode="mock", api_key=None, base_url="https://unused", model="m")
+        triage = valid_triage()
+        incident = triage["incidentes"][0]
+        finding = valid_finding(incident)
+        finding["evidencia"] = ["alert=ALRT-1"]
+        calls = {"especialista": 0}
+
+        class FlakyThenOk:
+            def stream(self, messages):
+                calls["especialista"] += 1
+                if calls["especialista"] == 1:
+                    yield {"type": "delta", "delta": "esto no es json"}
+                    yield {"type": "done", "mode": "mock", "model": "test"}
+                    return
+                yield {"type": "delta", "delta": json.dumps(finding, ensure_ascii=False)}
+                yield {"type": "done", "mode": "mock", "model": "test"}
+
+        class Controlled(Orchestrator):
+            def _provider(self, phase, timeout_seconds=None):
+                if phase == "triage":
+                    return type("P", (), {"stream": lambda self, messages: event_stream(triage)})()
+                if phase == "consolidacion":
+                    return type("P", (), {"stream": lambda self, messages: event_stream("reporte")})()
+                return FlakyThenOk()
+
+        events = list(Controlled(config).stream({"prompt": "alert=ALRT-1"}))
+        done = events[-1]
+        self.assertEqual(done["type"], "done")
+        self.assertEqual(done["fallidos"], 0)
+        self.assertGreaterEqual(calls["especialista"], 2)
+
 
 class HttpEndToEndTests(unittest.TestCase):
     def setUp(self):
