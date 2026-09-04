@@ -47,7 +47,7 @@ demostrar.
   `exactitud_tipo`, `exactitud_severidad`, `exactitud_ruteo` y `accion_correcta`
   calculados desde el linaje. La sección 6 del CLI las imprime. Tests nuevos.
 
-- [ ] **N-04 · `puntuar.py` — puntuación repetible sobre varios escenarios**
+- [x] **N-04 · `puntuar.py` — puntuación repetible sobre varios escenarios**
   Nuevo: `scripts/ejecutablesBase/puntuar.py`.
   ```
   python scripts/ejecutablesBase/puntuar.py --escenarios 6 --mode mock --json-out evals/results/score.json
