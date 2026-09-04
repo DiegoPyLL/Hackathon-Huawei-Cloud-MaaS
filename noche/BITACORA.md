@@ -144,3 +144,18 @@ y una corrida fallida no entra en el TOTAL. Ambas cosas con test.
 Limitación documentada: el bus no tiene reset, así que la fila N ve también los
 incidentes vivos de las filas anteriores. Cada fila se etiqueta con el escenario
 que la disparó pero puntúa contra todo lo activo, que es lo que el agente vio.
+
+## N-05 · Anclar la evidencia del triage · 08:05
+Estado: HECHA
+Commit: (el anterior a este)
+Autor: relevo (Claude) — SIN REVISIÓN INDEPENDIENTE
+Qué cambió: `validate_triage` acepta el volcado y sella cada cita igual que los
+hallazgos; `app.js` pinta el sello también en las tarjetas de incidentes.
+Verificación: compuerta verde, 182 tests (+4). Comprobado de punta a punta que
+el evento SSE `triage` lleva `evidencia_verificada` y que app.js la consume.
+Nota: marcar no es rechazar — un triage con evidencia parafraseada sigue siendo
+utilizable, solo queda declarado cuál cita no ancla. Y sin volcado no se marca
+nada, en vez de inventar un sello.
+Refactor mínimo declarado: `_normalizar` y `_evidencia_anclada` se movieron
+arriba de `validate_triage` para que estén definidas donde se usan. Contenido
+sin tocar.
