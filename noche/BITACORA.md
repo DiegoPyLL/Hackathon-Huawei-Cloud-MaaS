@@ -62,3 +62,33 @@ presupuesto ya en 300s y `/api/health` verificado (`presupuesto_seg: 300.0`):
 La segunda no es un timeout: el modelo devolvió JSON malformado. Y ese caso NO
 tiene reintento (ver R-12). Estaba marcada [x] por error; se desmarcó.
 Embudo en ambas: 4/4 recogidos → 0/4 detectados, todo perdido en triage.
+
+## R-12 · Reintento del triage cubre el JSON malformado · 05:10
+Estado: HECHA
+Commit: 8357f63
+Autor: relevo (Claude) — SIN REVISIÓN INDEPENDIENTE
+Qué cambió: se pide el texto crudo y se parsea aparte, así el mismo reintento
+cubre JSON que no parsea y JSON que parsea pero no valida.
+Verificación: compuerta verde, 165 tests (+2). Validado contra live: la corrida
+pasó de morir en triage a conversión 0.75.
+
+## R-13 · La consolidación ya no tira la corrida · 05:22
+Estado: HECHA
+Commit: (este)
+Autor: relevo (Claude) — SIN REVISIÓN INDEPENDIENTE
+Qué cambió: un fallo de consolidación deja la corrida en `parcial` con los
+hallazgos y las acciones conservados, en vez de perder el `done` entero.
+Verificación: compuerta verde, 166 tests (+1). Falta validar contra live.
+Nota: R-11 había protegido el triage pero no el patrón; esto lo completa.
+
+## N-02 · Corrida live de control — progreso, sigue BLOQUEADA · 05:22
+Estado: BLOQUEADA
+Autor: relevo (Claude) — SIN REVISIÓN INDEPENDIENTE
+Tercera corrida live (con R-12): el pipeline se desbloqueó de verdad.
+  embudo   4/4 recogidos → 3/4 detectados → 3/4 tipo ok → 3/4 ruteo ok
+           → 3/4 diagnosticados → 1/4 con acción
+  conversión 0.75 (venía de 0.0) · precisión 1.0 · 0 falsos positivos
+  4 descartes declarados · 4 hallazgos · 1 acción en cola
+Pero no llegó el `done`: la consolidación venció con 41.8s restantes y su
+excepción escapó. Eso es lo que arregla R-13. Falta una cuarta corrida para
+cerrar N-02; no se hizo en este tick por lo largo que venía.
