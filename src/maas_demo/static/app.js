@@ -115,11 +115,17 @@ function renderIncidents(incidents, discarded, deferred) {
     card.append(element("p", "muted", incident.motivo_ruteo));
     incidentList.append(card);
   });
-  [["Descartado", discarded], ["Diferido", deferred]].forEach(([label, items]) => {
-    (items || []).forEach((item) => {
-      const text = typeof item === "string" ? item : `${item.incidente_id}: ${item.motivo}`;
-      incidentList.append(element("li", "card discarded", `${label} — ${text}`));
-    });
+  (discarded || []).forEach((item) => {
+    const senal = typeof item === "string" ? item : item.senal || "";
+    const motivo = typeof item === "string" ? "" : item.motivo || "";
+    const evidencia = typeof item === "string" ? "" : item.evidencia || "";
+    const text = motivo ? `${senal}: ${motivo}` : senal;
+    const detail = evidencia ? ` (evidencia: ${evidencia})` : "";
+    incidentList.append(element("li", "card discarded", `Descartado — ${text}${detail}`));
+  });
+  (deferred || []).forEach((item) => {
+    const text = typeof item === "string" ? item : `${item.incidente_id}: ${item.motivo}`;
+    incidentList.append(element("li", "card discarded", `Diferido — ${text}`));
   });
 }
 
@@ -150,7 +156,14 @@ function renderFinding(finding) {
     card.append(element("p", null, finding.causa_raiz || "Sin causa raíz propuesta."));
     card.append(evidenceList(finding.evidencia));
     if (finding.descartado && finding.descartado.length) {
-      card.append(element("p", "muted", `Descartado: ${finding.descartado.join(" · ")}`));
+      const descartadoList = element("ul", "evidence descartado");
+      finding.descartado.forEach((item) => {
+        const hipotesis = typeof item === "string" ? item : item.hipotesis || "";
+        const dato = typeof item === "string" ? "" : item.dato_que_la_descarta || "";
+        descartadoList.append(element("li", null, dato ? `${hipotesis} — descartada por: ${dato}` : hipotesis));
+      });
+      card.append(element("p", "muted", "Hipótesis descartadas:"));
+      card.append(descartadoList);
     }
     if (finding.viabilidad) card.append(tag(finding.viabilidad, "viabilidad"));
   }
