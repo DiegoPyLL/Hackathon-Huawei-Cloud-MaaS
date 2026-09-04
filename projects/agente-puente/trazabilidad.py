@@ -412,3 +412,55 @@ def trazar(
         "por_pantalla": construir_por_pantalla(verdad, canales),
         "meta": agente.get("meta", {}),
     }
+
+
+def _tasa(numerador: int, denominador: int) -> float | None:
+    """None cuando no hay universo. Un 0.0 inventado sobre cero casos miente:
+    dice 'fallo todo' donde lo correcto es 'no habia nada que acertar'."""
+    return round(numerador / denominador, 4) if denominador else None
+
+
+def puntuar(linaje: list[dict[str, Any]], falsos_positivos: int = 0) -> dict[str, Any]:
+    """Las metricas de clasificacion, calculadas desde el linaje.
+
+    Se apoya en la atribucion por evidencia: un incidente cuenta como detectado
+    cuando alguna de las lineas que el agente cito pertenece a el, no cuando
+    coincide el tipo. Comparar conjuntos de tipos —lo que se hacia antes— premia
+    acertar el tipo de OTRO incidente y castiga detectar el correcto con otro
+    nombre.
+
+    Los denominadores son distintos a proposito:
+      - precision y recall se calculan sobre incidentes.
+      - las exactitudes de tipo, severidad y ruteo, solo sobre los DETECTADOS:
+        preguntar si clasifico bien algo que no vio no tiene sentido.
+      - la accion, solo sobre los incidentes que esperaban una.
+    """
+    detectados = [f for f in linaje if f["detectado"]]
+    verdaderos_positivos = len(detectados)
+    no_detectados = len(linaje) - verdaderos_positivos
+    con_accion_esperada = [f for f in linaje if f["accion_esperada"]]
+
+    precision = _tasa(verdaderos_positivos, verdaderos_positivos + falsos_positivos)
+    recall = _tasa(verdaderos_positivos, verdaderos_positivos + no_detectados)
+    if precision and recall and (precision + recall):
+        f1 = round(2 * precision * recall / (precision + recall), 4)
+    else:
+        f1 = 0.0 if (precision is not None and recall is not None) else None
+
+    return {
+        "incidentes_reales": len(linaje),
+        "verdaderos_positivos": verdaderos_positivos,
+        "falsos_positivos": falsos_positivos,
+        "falsos_negativos": no_detectados,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "exactitud_tipo": _tasa(sum(1 for f in detectados if f["tipo_correcto"]), len(detectados)),
+        "exactitud_severidad": _tasa(sum(1 for f in detectados if f["severidad_correcta"]), len(detectados)),
+        "exactitud_ruteo": _tasa(sum(1 for f in detectados if f["ruteo_correcto"]), len(detectados)),
+        "accion_correcta": _tasa(
+            sum(1 for f in con_accion_esperada if f["accion_correcta"]),
+            len(con_accion_esperada),
+        ),
+        "no_detectados": [f["incidente_real"] for f in linaje if not f["detectado"]],
+    }

@@ -273,3 +273,82 @@ class TrazarTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PuntuarTests(unittest.TestCase):
+    """N-03: la puntuacion sale de la atribucion por evidencia, no de comparar
+    conjuntos de tipos.
+
+    El contraste viejo comparaba `{tipos reales}` contra `{tipos detectados}`.
+    Con eso, acertar el tipo de OTRO incidente contaba como acierto, y detectar
+    el incidente correcto llamandolo de otra forma contaba como fallo.
+    """
+
+    def _linaje(self, verdad, triage, hallazgos=(), canales=None):
+        return tz.construir_linaje(verdad, triage, list(hallazgos),
+                                   canales or {"monitoreo": [LINEA_DEPLOY, LINEA_500, LINEA_LOCK]})
+
+    def test_todo_detectado_y_bien_clasificado(self):
+        verdad = verdad_de(incidente())
+        triage = {"incidentes": [{
+            "id": "INC-01", "titulo": "x", "tipo": "indisponibilidad", "severidad": "alta",
+            "especialistas": ["sysadmin"], "evidencia": [LINEA_DEPLOY],
+        }], "descartados": []}
+        p = tz.puntuar(self._linaje(verdad, triage))
+        self.assertEqual(p["precision"], 1.0)
+        self.assertEqual(p["recall"], 1.0)
+        self.assertEqual(p["f1"], 1.0)
+        self.assertEqual(p["exactitud_tipo"], 1.0)
+        self.assertEqual(p["exactitud_ruteo"], 1.0)
+
+    def test_detectar_el_incidente_correcto_con_otro_tipo_no_es_un_falso_negativo(self):
+        """El defecto central del contraste viejo: esto contaba como no detectado."""
+        verdad = verdad_de(incidente())
+        triage = {"incidentes": [{
+            "id": "INC-01", "titulo": "x", "tipo": "degradacion", "severidad": "alta",
+            "especialistas": ["sysadmin"], "evidencia": [LINEA_DEPLOY],
+        }], "descartados": []}
+        p = tz.puntuar(self._linaje(verdad, triage))
+        self.assertEqual(p["recall"], 1.0, "lo detecto: la evidencia es suya")
+        self.assertEqual(p["exactitud_tipo"], 0.0, "pero lo clasifico mal")
+
+    def test_acertar_el_tipo_de_otro_incidente_no_suma(self):
+        """El reverso: el tipo coincide con el de otro, pero no detecto ninguno."""
+        verdad = verdad_de(incidente("INC-01"),
+                           incidente("INC-02", tipo="datos", lineas=(LINEA_LOCK,)))
+        triage = {"incidentes": [{
+            "id": "INC-A", "titulo": "x", "tipo": "datos", "severidad": "alta",
+            "especialistas": ["dba"], "evidencia": ["algo que no esta en ningun volcado real"],
+        }], "descartados": []}
+        p = tz.puntuar(self._linaje(verdad, triage), falsos_positivos=1)
+        self.assertEqual(p["verdaderos_positivos"], 0)
+        self.assertEqual(p["precision"], 0.0)
+        self.assertEqual(p["recall"], 0.0)
+        self.assertEqual(sorted(p["no_detectados"]), ["INC-01", "INC-02"])
+
+    def test_las_exactitudes_solo_miran_los_detectados(self):
+        """Preguntar si clasifico bien algo que no vio no tiene sentido."""
+        verdad = verdad_de(incidente("INC-01"),
+                           incidente("INC-02", tipo="datos", lineas=(LINEA_LOCK,), ruteo="dba"))
+        triage = {"incidentes": [{
+            "id": "INC-01", "titulo": "x", "tipo": "indisponibilidad", "severidad": "alta",
+            "especialistas": ["sysadmin"], "evidencia": [LINEA_DEPLOY],
+        }], "descartados": []}
+        p = tz.puntuar(self._linaje(verdad, triage))
+        self.assertEqual(p["recall"], 0.5)
+        self.assertEqual(p["exactitud_tipo"], 1.0, "1 de 1 detectado, no 1 de 2 reales")
+
+    def test_sin_universo_la_tasa_es_none_y_no_cero(self):
+        """Un 0.0 sobre cero casos dice 'fallo todo' donde no habia nada."""
+        verdad = verdad_de(incidente(accion=None))
+        triage = {"incidentes": [{
+            "id": "INC-01", "titulo": "x", "tipo": "indisponibilidad", "severidad": "alta",
+            "especialistas": ["sysadmin"], "evidencia": [LINEA_DEPLOY],
+        }], "descartados": []}
+        p = tz.puntuar(self._linaje(verdad, triage))
+        self.assertIsNone(p["accion_correcta"], "ningun incidente esperaba accion")
+
+    def test_linaje_vacio_no_divide_por_cero(self):
+        p = tz.puntuar([], falsos_positivos=0)
+        self.assertIsNone(p["precision"])
+        self.assertIsNone(p["recall"])
