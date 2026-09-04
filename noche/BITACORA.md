@@ -212,3 +212,12 @@ finales se reparten el espacio restante. .agent-row pierde flex: 0 0 280px.
 Verificación: compuerta verde, 205 tests.
 Nota: no se verificó con captura headless de Chrome (no disponible). El grid
 1fr 1fr garantiza que no quede vacío a ningún ancho.
+
+## N-11 · Píldora de estado del semáforo legible · 09:30
+Estado: HECHA
+Commit: bb770eb
+Qué cambió: getStatusTextColor() devuelve clases con fondo translúcido y texto
+coloreado. La píldora la usa en vez de bg-current mix-blend-overlay.
+Verificación: compuerta verde, 205 tests.
+Nota: no se verificó con captura headless. El texto ahora tiene color explícito
+sobre fondo translúcido, no blend mode.

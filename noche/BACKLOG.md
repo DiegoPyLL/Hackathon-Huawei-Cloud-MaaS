@@ -117,7 +117,7 @@ demostrar.
   grid `240px 1fr 1fr`. Verificalo con una captura headless de Chrome a
   1500x1500 y anotá en la bitácora que no queda vacío.
 
-- [ ] **N-11 · La píldora de estado del semáforo sale en blanco**
+- [x] **N-11 · La píldora de estado del semáforo sale en blanco**
   `projects/Metricas(polling)/index.html:107`.
   `bg-current text-white mix-blend-overlay` pinta el fondo del mismo color que
   el texto: `OPERATIONAL`/`DEGRADED`/`OUTAGE` es invisible.
