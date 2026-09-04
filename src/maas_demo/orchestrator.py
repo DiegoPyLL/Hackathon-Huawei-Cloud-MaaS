@@ -435,14 +435,25 @@ class Orchestrator:
             pool.shutdown(wait=not presupuesto_agotado)
         if presupuesto_agotado:
             yield {"type": "fase", "fase": "presupuesto_agotado", "estado": "ok", "run_id": run_id}
+        # Una consolidacion que falla NO puede tirar la corrida: para cuando se
+        # llega aqui ya hay triage, hallazgos y acciones en cola. Medido en live:
+        # la consolidacion vencio con 41.8s de presupuesto restante y la
+        # ProviderError se llevo puesta una corrida con 4 hallazgos y 1 accion
+        # pendiente de aprobacion. El reporte es lo ultimo y lo mas prescindible.
+        consolidacion_fallida = None
         if presupuesto_restante() > 0:
             payload = json.dumps({"triage": triage, "hallazgos": findings, "diferidos": deferred}, ensure_ascii=False)
-            report, consolidation_meta = call("consolidacion", [{"role": "system", "content": CONSOLIDACION_PROMPT}, {"role": "user", "content": payload}], structured=False)
-            for chunk in [report[i:i+256] for i in range(0, len(report), 256)]: yield {"type": "delta", "delta": chunk}
+            try:
+                report, consolidation_meta = call("consolidacion", [{"role": "system", "content": CONSOLIDACION_PROMPT}, {"role": "user", "content": payload}], structured=False)
+                for chunk in [report[i:i+256] for i in range(0, len(report), 256)]: yield {"type": "delta", "delta": chunk}
+            except (ProviderError, ValueError) as error:
+                consolidacion_fallida = str(error)
+                report = f"Sin reporte ejecutivo: la consolidación falló ({error}). El triage y los hallazgos de arriba sí se completaron."
+                yield {"type": "fase", "fase": "consolidacion", "estado": "fallida", "run_id": run_id, "detalle": consolidacion_fallida}
         else:
             report = "Corrida entregada parcialmente: el presupuesto de reloj se agotó antes de la consolidación."
         failed = [x for x in findings if x.get("estado") == "fallido"]
-        result = {"run_id": run_id, "mode": self.config.mode, "datos": "SUPABASE" if self.config.supabase_url and self.config.supabase_key else "NO CONFIGURADO", "status": "parcial" if deferred or failed or presupuesto_agotado else "completada", "triage": triage, "hallazgos": findings, "diferidos": deferred, "reporte": report, "modelos": self.models, "llamadas": 2 + len(tasks), "latency_ms": round((time.perf_counter()-started)*1000), "fallidos": len(failed), "aprobaciones": [x for x in self.store.approvals.values() if x.get("run_id") == run_id], "trazas": [t.__dict__ for t in traces]}
+        result = {"run_id": run_id, "mode": self.config.mode, "datos": "SUPABASE" if self.config.supabase_url and self.config.supabase_key else "NO CONFIGURADO", "status": "parcial" if deferred or failed or presupuesto_agotado or consolidacion_fallida else "completada", "triage": triage, "hallazgos": findings, "diferidos": deferred, "reporte": report, "modelos": self.models, "llamadas": 2 + len(tasks), "latency_ms": round((time.perf_counter()-started)*1000), "fallidos": len(failed), "aprobaciones": [x for x in self.store.approvals.values() if x.get("run_id") == run_id], "trazas": [t.__dict__ for t in traces]}
         self.store.save(result)
         self._persist(result)
         yield {"type": "done", **{k: result[k] for k in ("run_id", "mode", "status", "modelos", "llamadas", "latency_ms", "diferidos", "fallidos")}}
