@@ -26,8 +26,9 @@ demostrar.
   fija que el front y el back declaran el mismo presupuesto o que el front lo
   lee de `/api/health`.
 
-- [!] **N-02 · Corrida live de control, una sola vez** — BLOQUEADA: el triage live
-  no llega a entregar. Ver R-07, R-11 y R-12. Reintentar cuando R-12 este resuelto.
+- [x] **N-02 · Corrida live de control, una sola vez** — HECHA con corrida `parcial`,
+  motivo declarado (ver bitácora y R-14). El artefacto es válido: `presupuesto_seg: 300`
+  verificado en `/api/health` antes de correr.
   Sin cambios de código. **Única excepción a la prohibición de `live`.**
   Levantá el stack (`python projects/bus-incidentes/levantar_todo.py`), provocá
   3 escenarios distintos, dispará una corrida por el puente y guardá la salida
