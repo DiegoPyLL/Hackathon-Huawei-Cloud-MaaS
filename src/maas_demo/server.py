@@ -49,7 +49,7 @@ def create_handler(config: Config):
                     self._json(HTTPStatus.OK, result)
                 return
             if self.path == "/api/aprobaciones":
-                self._json(HTTPStatus.OK, {"mode": config.mode, "datos": "NO CONFIGURADO", "aprobaciones": store.pending()})
+                self._json(HTTPStatus.OK, {"mode": config.mode, "datos": "NO CONFIGURADO", "aprobaciones": store.todas()})
                 return
             filename = STATIC_ROUTES.get(self.path)
             if filename is None:

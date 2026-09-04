@@ -430,3 +430,34 @@ class ExecutableFlowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ColaDeAprobacionesTests(unittest.TestCase):
+    """La cola es el rastro de la compuerta humana, no una lista de tareas.
+
+    Sintoma medido en la demo live: se propuso `revertir_deploy DEP-464`, se
+    aprobo, y la accion DESAPARECIO de :8080 y de :8001. El endpoint servia
+    `pending()`, asi que al decidir se borraba de la pantalla justo en el
+    momento que mas importa mostrar. El frontend ya tenia el estilo
+    `.apr-item.decidida` para pintarlas atenuadas: fue diseñado para verlas.
+    """
+
+    def test_una_aprobacion_decidida_sigue_en_la_cola(self):
+        from src.maas_demo.orchestrator import MemoryStore
+        store = MemoryStore()
+        store.approvals["a"] = {"id": "a", "action_id": "revertir_deploy",
+                                "estado": "pendiente"}
+        self.assertEqual(len(store.pending()), 1)
+        store.approvals["a"]["estado"] = "aprobada"
+        self.assertEqual(len(store.pending()), 0, "ya no espera decision")
+        self.assertEqual(len(store.todas()), 1, "pero sigue siendo parte del rastro")
+
+    def test_las_de_riesgo_bajo_tambien_aparecen(self):
+        """Entran como `registrada` y nunca estan pendientes: con `pending()`
+        no se veian nunca, aunque el agente si las hubiera propuesto."""
+        from src.maas_demo.orchestrator import MemoryStore
+        store = MemoryStore()
+        store.approvals["b"] = {"id": "b", "action_id": "anotar_incidente",
+                                "estado": "registrada"}
+        self.assertEqual(store.pending(), [])
+        self.assertEqual(len(store.todas()), 1)

@@ -161,6 +161,17 @@ class MemoryStore:
     def pending(self) -> list[dict[str, Any]]:
         return [x for x in self.approvals.values() if x["estado"] == "pendiente"]
 
+    def todas(self) -> list[dict[str, Any]]:
+        """Todo lo que el agente propuso, no solo lo que sigue esperando.
+
+        La cola es el rastro de la compuerta humana: que se propuso, quien
+        decidio y que decidio. Servir solo `pending()` hacia que una accion
+        DESAPARECIERA de la pantalla al aprobarla, justo en el momento que mas
+        importa mostrar. Y las de riesgo bajo, que entran como `registrada` y
+        nunca estan pendientes, no aparecian jamas.
+        """
+        return list(self.approvals.values())
+
 def extract_json(text: str) -> Any:
     start = text.find("{")
     if start < 0:
