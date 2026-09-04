@@ -1,11 +1,38 @@
-![alt text](image.png)
+<p align="center">
+  <a href="https://www.huaweicloud.com/intl/en-us/" target="_blank" rel="noopener noreferrer">
+    <img src="image.png" alt="Huawei Cloud" height="150">
+  </a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://ai.kostra.cloud/" target="_blank" rel="noopener noreferrer">
+    <img src="image-1.png" alt="Kostra Cloud" height="150">
+  </a>
+</p>
 
-# Incident Response Brief
 
-Vertical slice para Huawei Cloud ModelArts Studio (MaaS): un Incident Response
-Agent que investiga logs sintéticos con ruido y falsos positivos, cita
-evidencia concreta para su causa raíz y propone una corrección, mediante una
-experiencia web con streaming, métricas y modo de ejecución visible.
+# Incident Response Agent
+
+Vertical slice para Huawei Cloud ModelArts Studio (MaaS), usando los servicios de
+[Kostra Cloud](https://ai.kostra.cloud/) como proveedor de modelos: un agente que recibe un
+incidente, separa el ruido y los falsos positivos, identifica una causa raíz con
+evidencia concreta y propone una respuesta. La experiencia web muestra el
+progreso en streaming, las métricas y el modo de ejecución.
+
+El agente trabaja sobre datos mockeados de una empresa ficticia: logs, tickets,
+alertas, cuentas, sesiones, hosts y transacciones simuladas. Esto permite
+demostrar el diagnóstico y el flujo de respuesta sin intervenir sistemas ni datos
+reales.
+
+Todos los procesos de inferencia del vertical —triage, especialistas y
+consolidación— usan por defecto el modelo **GLM 5.2** a través de Kostra Cloud.
+El modelo puede cambiarse mediante variables de entorno para evaluación, sin
+cambiar el contrato del dominio.
+
+El mismo flujo puede recibir incidentes desde tres canales: chat de desarrollo,
+correo de soporte y monitoreo. El subproyecto [`projects/incident-agent/`](projects/incident-agent/)
+añade el flujo de tickets por correo: Gmail reenvía a Postmark, Postmark entrega
+el webhook a Supabase y el incidente queda disponible para el agente. También
+incluye la generación de borradores de respuesta; el envío efectivo del correo
+queda fuera del vertical actual.
 
 El objetivo actual no es fingir un producto terminado, sino demostrar en pocos
 minutos que la integración completa funciona y se puede evaluar.
@@ -107,19 +134,47 @@ El último comando falla si el despliegue responde en `mock`; así una simulaci�
 no puede presentarse accidentalmente como integración real.
 
 
+## Qué hace el agente
+
+1. **Ingesta:** valida el tamaño, marca el canal de origen y trata el texto
+   recibido como datos, no como instrucciones.
+2. **Triage:** el Orquestador clasifica los incidentes en una taxonomía cerrada
+   de ocho tipos y registra qué señales descartó:
+   `indisponibilidad`, `degradacion`, `error_funcional`, `acceso_identidad`,
+   `datos`, `integracion_terceros`, `capacidad` y `seguridad`.
+3. **Despacho:** rutea cada incidente a uno o más especialistas: DBA, SysAdmin
+   y SecOps. Las tareas se ejecutan en paralelo de forma acotada.
+4. **Consolidación:** el Orquestador reúne los hallazgos y genera un reporte con
+   tipo, causa raíz probable, evidencia, hipótesis descartadas y acción
+   correctiva.
+5. **Aprobación humana:** las acciones de riesgo quedan pendientes. Solo una
+   persona puede aprobarlas o rechazarlas; el modelo nunca ejecuta SQL libre ni
+   afirma que aplicó un cambio sin evidencia.
+
+Una corrida incompleta se declara como parcial: los incidentes diferidos por
+presupuesto y las tareas fallidas permanecen visibles.
+
 ## Arquitectura
 
 ```text
 Navegador
    │ POST /api/chat/stream (SSE)
    ▼
-ChatService ── contrato propio ──┬── MockProvider (local y determinista)
-                                 └── MaaSProvider (Huawei MaaS V2)
+ChatService / Orchestrator ── contrato ChatProvider ──┬── MockProvider (local)
+                                                      └── MaaSProvider (live)
+                                                               │
+                                                               ▼
+                                                        Kostra Cloud
+                                                        (GLM 5.2)
+
+Correo de soporte → Gmail → Postmark Inbound → Edge Function Supabase
+                                                └→ tickets e incidentes
 ```
 
 El dominio no conoce URLs, autenticación ni eventos del proveedor. El adaptador
-traduce el contrato de Huawei y preserva TLS. La respuesta final expone modo,
-modelo y latencia.
+traduce el contrato del proveedor y preserva TLS. La respuesta final expone modo,
+modelo y latencia. En `mock` no se consume cloud; en `live`, un fallo del
+proveedor se muestra como fallo y nunca se convierte silenciosamente en `mock`.
 
 ## Estructura
 
@@ -128,12 +183,26 @@ src/maas_demo/           Aplicación, proveedor MaaS y frontend
 tests/                   Contratos, streaming y API HTTP
 evals/                   Casos repetibles de evaluación
 scripts/                 Instalación, evaluación y smoke test
+projects/incident-agent/ Tickets por correo, schema Supabase y borradores de email
 reinforcement-range/     Rango de pruebas aislado: contenedor vulnerable +
                          agente de hardening con shell real (ver ADR 0002)
 docs/product/            Visión, alcance y guion de demo
 docs/architecture/       Stack y decisiones técnicas
 docs/operations/         Despliegue y comprobación live
 ```
+
+## Tickets por correo (`projects/incident-agent/`)
+
+Este módulo contiene el schema de Supabase, las Edge Functions `recibir-email` y
+`generar-email`, además de datos semilla para probar el flujo. El esquema separa
+correos entrantes, incidentes, hallazgos, trazas, aprobaciones y borradores de
+salida. La clave `service_role` solo debe vivir en el backend.
+
+Para aplicar o desplegar recursos externos se debe seguir el README del módulo y
+autorizar explícitamente cada operación. En este clon, la integración del correo
+está documentada y el código de las funciones está presente, pero la clasificación
+automática del correo y el despacho del agente desde la Edge Function siguen en
+desarrollo.
 
 ## Rango de refuerzo (`reinforcement-range/`)
 
@@ -156,10 +225,15 @@ spoilers del ataque a ciegas del equipo.
 
 ## Estado
 
-- Vertical slice local: operativo en modo `mock`.
-- Adaptador Huawei MaaS V2: implementado y probado con contrato simulado.
-- Llamada cloud real: requiere una API key MaaS y servicio habilitado.
-- Despliegue público: pendiente de elegir y aprovisionar el runtime Huawei.
+- **Operativo:** panel web local en `mock`, endpoint de chat, ejecución
+  multiagente de incidentes, streaming SSE, evaluación determinista y smoke test.
+- **Implementado:** adaptador `live` compatible con la API de inferencia, contrato
+  `ChatProvider`, persistencia opcional en Supabase y cola de aprobación humana.
+- **En desarrollo:** clasificación automática de correos, ejecución del agente
+  disparada por el webhook y envío efectivo de respuestas por email.
+- **Requiere configuración:** una API key y un servicio MaaS habilitado para
+  `live`; un proyecto Supabase para persistencia; y un runtime Huawei para un
+  despliegue público.
 
 La visión y lo que queda explícitamente fuera están en
 [`docs/product/vision.md`](docs/product/vision.md) y

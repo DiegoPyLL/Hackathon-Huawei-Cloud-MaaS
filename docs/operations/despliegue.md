@@ -42,11 +42,53 @@ En vez de un runtime siempre encendido, la corrida se dispara de dos formas —
 ver [ADR-0006](../architecture/decisions/0006-ejecucion-programada-y-manual.md):
 
 - **Programada:** el workflow `corrida-programada.yml` de GitHub Actions
-  (`schedule` + `workflow_dispatch`) ejecuta la corrida completa en `live`,
-  escribe en Supabase y sube el reporte ejecutivo como artifact. Usa GitHub
-  Secrets — nunca `.env` — para `MAAS_API_KEY` y `SUPABASE_SERVICE_ROLE_KEY`.
-- **Manual:** `python3 scripts/ejecutablesBase/ejecutar-corrida.py`, mismo
+  (`schedule` + `workflow_dispatch`) repasa **todos** los logs de Supabase en
+  `live`, persiste las corridas y publica los hallazgos en la pestaña Security
+  del repositorio como alertas de code scanning — ver
+  [ADR-0009](../architecture/decisions/0009-salida-como-code-scanning.md).
+- **Manual:** `python3 scripts/ejecutablesBase/ejecutar-corrida.py`, el mismo
   código, disparado a mano.
+
+### Secrets del workflow programado
+
+Se leen de GitHub Secrets, nunca de `.env`:
+
+| Secret | Para qué |
+| --- | --- |
+| `MAAS_API_KEY` | Inferencia en Kostra |
+| `MAAS_BASE_URL` | Endpoint del proveedor |
+| `MAAS_MODEL` | Modelo por defecto de los tres roles |
+| `SUPABASE_URL` | Almacén, vía PostgREST |
+| `SUPABASE_SERVICE_ROLE_KEY` | Credencial que ignora RLS; solo en el backend |
+
+`MAAS_MODE` va fijo a `live` en el workflow, no como secret.
+
+### Horario
+
+El cron pedido es **19:00 de Chile todo el año**. GitHub solo entiende UTC y
+Chile cambia de huso dos veces al año, así que el workflow declara los dos crons
+posibles (`43 22` y `43 23` UTC) y un paso-guarda consulta la hora local con
+`zoneinfo` para dejar pasar únicamente el que corresponde. Sin esa guarda, media
+parte del año la corrida caería a las 18:00.
+
+El minuto es `:43` y no `:00` porque GitHub descarta ejecuciones programadas en
+los minutos de más carga.
+
+### La corrida completa en local
+
+El mismo archivo hace en local todo lo que hace el workflow, y además levanta el
+panel al terminar:
+
+```bash
+python3 scripts/ejecutablesBase/ejecutar-corrida.py   --con-tests --desde-supabase --mode live   --sarif evals/results/incidentes.sarif   --json-out evals/results/corrida.json   --panel
+```
+
+Con `--mode mock` la misma línea ejercita la cadena entera sin gastar saldo.
+
+`--presupuesto-minutos` corta la corrida entre volcados al agotarse y declara
+cuántos quedaron sin procesar: el workflow usa 330 minutos para cortar antes de
+que el runner muera a las 6 horas, porque un corte del runner desaparece sin
+dejar dicho qué faltó.
 
 ## Gate de evidencia
 

@@ -4,7 +4,7 @@ Cómo el proyecto vive en producción.
 
 | Documento | Contenido |
 | --- | --- |
-| [`despliegue.md`](despliegue.md) | Contenedor, gate live, rollback y contingencia |
+| [`despliegue.md`](despliegue.md) | Contenedor, gate live, corrida programada y sus secrets, rollback y contingencia |
 | _(pendiente)_ `entornos.md` | Local, staging y producción: diferencias y variables de cada uno |
 | _(pendiente)_ `seguridad.md` | Cabeceras, CSP, gestión de secretos, dependencias |
 | _(pendiente)_ `incidentes.md` | Registro de caídas: causa, impacto, corrección |

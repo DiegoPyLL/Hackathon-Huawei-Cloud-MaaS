@@ -41,6 +41,22 @@
             <button type="button" data-prompt="10:41:02 401 user=svc-cache; 10:41:03 401 user=svc-cache; 10:41:05 401 user=svc-cache; 10:42:10 acceso a 169.254.169.254 desde el pod api-7f. El equipo sospecha fuerza bruta. Evalúa la hipótesis con la evidencia disponible.">
               ¿Ataque o falso positivo?
             </button>
+            <button type="button" data-prompt="2026-09-03 10:14:58 deploy=DPL-4471 servicio=checkout version=2.31.0 estado=completado
+10:15:22 500 POST /api/checkout/confirm alert=ALRT-9001 tasa_error 0.6% -> 34% en 90s
+10:16:05 500 POST /api/checkout/confirm alert=ALRT-9001 NullPointer en PricingClient
+10:16:40 lock_wait 38s tabla=pedidos transaccion=TX-88214 sesiones_en_espera=57
+10:17:12 lock_wait 41s tabla=pedidos transaccion=TX-88214
+10:18:03 401 user=svc-billing ip=203.0.113.44
+10:18:04 401 user=admin.ops ip=203.0.113.44
+10:18:06 401 user=j.morales ip=203.0.113.44
+10:18:09 401 user=soporte ip=203.0.113.44 (12 cuentas distintas en 40s, 1-2 intentos por cuenta)
+10:18:51 200 POST /login user=soporte ip=203.0.113.44
+10:19:30 WARN certificado TLS de api-partners vence en 21 dias
+10:20:02 #incidentes: &quot;URGENTE!!! se cayo TODO, no anda nada&quot; - mismo autor 10:20:40: &quot;perdon, era mi VPN, desde el celular entra bien&quot;
+10:21:15 healthcheck /healthz del pod api-7f: 1 fallo aislado, recuperado en el reintento siguiente
+10:22:40 latencia p99 del servicio de reportes 1.2s -> 1.9s, sin errores y sin alerta asociada">
+              Deploy, ataque y ruido
+            </button>
           </div>
           <button id="submit" class="primary" type="button">Investigar incidente</button>
 
