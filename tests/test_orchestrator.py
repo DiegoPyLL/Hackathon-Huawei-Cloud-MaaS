@@ -184,3 +184,87 @@ class PlazoPorLlamadaTests(unittest.TestCase):
         self.assertEqual(final["type"], "done")
         self.assertEqual(final["status"], "fallida")
         self.assertIn("Sin presupuesto", final["error"])
+
+
+class ReintentoDeTriageTests(unittest.TestCase):
+    """R-12: el reintento del triage no cubria el JSON malformado.
+
+    Sintoma medido en live: la corrida murio con "Expecting property name
+    enclosed in double quotes: line 3 column 2 (char 21)" a los 144s y sin un
+    solo reintento. `extract_json` corria dentro de `call()`, o sea ANTES del
+    try/except que reintenta: un JSON bien formado que no validaba tenia un
+    reintento, y uno roto no tenia ninguno. Devolver JSON roto es la falla mas
+    frecuente de un modelo, asi que la unica sin red era la mas probable.
+    """
+
+    TRIAGE_VALIDO = json.dumps({
+        "version": "1",
+        "incidentes": [{
+            "id": "INC-01", "titulo": "Caida de checkout", "tipo": "indisponibilidad",
+            "canal": "monitoreo", "severidad": "alta", "ataque_activo": False,
+            "evidencia": ["alert=ALRT-1"], "especialistas": ["sysadmin"],
+            "motivo_ruteo": "disponibilidad",
+        }],
+        "descartados": [],
+    })
+    TRIAGE_ROTO = '{\n  "version": "1",\n  incidentes: []\n}'
+
+    def setUp(self):
+        self.config = Config(mode="mock", api_key=None, base_url="https://unused/v2", model="demo")
+
+    def _proveedor_por_turnos(self, respuestas):
+        turnos = iter(respuestas)
+        registro = {"llamadas": 0, "mensajes": []}
+
+        class PorTurnos:
+            def stream(self_inner, messages):
+                registro["llamadas"] += 1
+                registro["mensajes"].append(messages)
+                yield {"type": "delta", "delta": next(turnos)}
+                yield {"type": "done", "mode": "mock", "model": "x"}
+
+        return PorTurnos, registro
+
+    def test_json_roto_la_primera_vez_se_reintenta_y_la_corrida_termina(self):
+        PorTurnos, registro = self._proveedor_por_turnos(
+            [self.TRIAGE_ROTO, self.TRIAGE_VALIDO,
+             # especialista y consolidacion: cualquier cosa parseable / texto
+             json.dumps({
+                 "version": "1", "incidente_id": "INC-01", "especialista": "sysadmin",
+                 "causa_raiz": "x", "confianza": "media", "evidencia": ["alert=ALRT-1"],
+                 "descartado": [], "viabilidad": "requiere_mas_datos", "accion": None,
+             }),
+             "reporte final"])
+        orchestrator = Orchestrator(self.config)
+        orchestrator._provider = lambda phase, timeout_seconds=None: PorTurnos()
+
+        eventos = list(orchestrator.stream({"prompt": "MONITOREO alert=ALRT-1 checkout 500"}))
+
+        # Se declaro el reintento y no se perdio la corrida.
+        reintentos = [e for e in eventos
+                      if e["type"] == "fase" and e.get("estado") == "reintento"]
+        self.assertEqual(len(reintentos), 1)
+        self.assertIn("double quotes", reintentos[0]["detalle"])
+        final = eventos[-1]
+        self.assertEqual(final["type"], "done")
+        self.assertNotEqual(final["status"], "fallida")
+        # El reintento le devolvio al modelo su propio texto y el error concreto.
+        segundo = registro["mensajes"][1]
+        self.assertEqual(segundo[-2]["role"], "assistant")
+        self.assertIn("incidentes: []", segundo[-2]["content"])
+        self.assertIn("no sirve", segundo[-1]["content"])
+
+    def test_json_roto_las_dos_veces_termina_en_done_fallida(self):
+        PorTurnos, registro = self._proveedor_por_turnos(
+            [self.TRIAGE_ROTO, self.TRIAGE_ROTO])
+        orchestrator = Orchestrator(self.config)
+        orchestrator._provider = lambda phase, timeout_seconds=None: PorTurnos()
+
+        eventos = list(orchestrator.stream({"prompt": "MONITOREO alert=ALRT-1"}))
+
+        final = eventos[-1]
+        self.assertEqual(final["type"], "done")
+        self.assertEqual(final["status"], "fallida")
+        self.assertIn("double quotes", final["error"])
+        # Exactamente dos intentos: uno y el reintento. Ni mas, ni menos.
+        self.assertEqual(registro["llamadas"], 2)

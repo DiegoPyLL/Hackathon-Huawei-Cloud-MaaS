@@ -21,6 +21,8 @@ MAX_INCIDENTS = 6
 MAX_SPECIALISTS = 2
 MAX_CALLS = 8
 MAX_PARALLEL = 3
+# Cuanto del entregable roto se le devuelve al modelo en el reintento.
+MAX_ECO_REINTENTO = 4000
 PRESUPUESTO_CORRIDA_SEG = 300.0
 ACTION_CATALOG = {
     "cerrar_alerta_falsa": ("bajo", False), "anotar_incidente": ("bajo", False),
@@ -344,20 +346,27 @@ class Orchestrator:
         # deba escapar: el cliente tiene que recibir un `done` con el motivo, sus
         # trazas y su latencia, igual que cualquier otra corrida. Escapar dejaba
         # la pantalla con las fases sin cerrar y la barra de presupuesto viva.
+        # El reintento cubre las DOS formas de entregable malo, no solo una:
+        # JSON que no parsea y JSON que parsea pero no valida. Antes `call()`
+        # hacia el `extract_json` por dentro, asi que un JSON roto reventaba
+        # ANTES de entrar al try del reintento — y devolver JSON roto es la
+        # falla mas frecuente de un modelo. Medido en live: una corrida murio
+        # con "Expecting property name enclosed in double quotes" y cero
+        # reintentos. Aqui se pide el texto crudo y se parsea aparte.
         try:
-            triage, triage_meta = call("triage", mensajes_triage)
+            crudo, triage_meta = call("triage", mensajes_triage, structured=False)
             try:
-                triage = validate_triage(triage)
+                triage = validate_triage(extract_json(crudo))
             except ValueError as error:
-                # El contrato manda reintentar una vez devolviendo el error concreto,
-                # en vez de cortar la corrida al primer entregable mal formado.
                 yield {"type": "fase", "fase": "triage", "estado": "reintento", "run_id": run_id, "detalle": str(error)}
                 reintento = mensajes_triage + [
-                    {"role": "assistant", "content": json.dumps(triage, ensure_ascii=False)},
-                    {"role": "user", "content": f"El entregable no valida: {error}. Corrígelo y devuelve solo el JSON."},
+                    # Se le devuelve su propio texto, recortado: un entregable roto
+                    # puede ser enorme y no vale la pena pagarlo dos veces.
+                    {"role": "assistant", "content": crudo[:MAX_ECO_REINTENTO]},
+                    {"role": "user", "content": f"El entregable no sirve: {error}. Devuelve ÚNICAMENTE el JSON válido, sin texto alrededor."},
                 ]
-                triage, triage_meta = call("triage", reintento)
-                triage = validate_triage(triage)
+                crudo, triage_meta = call("triage", reintento, structured=False)
+                triage = validate_triage(extract_json(crudo))
         except (ProviderError, ValueError) as error:
             yield {"type": "fase", "fase": "triage", "estado": "fallida", "run_id": run_id, "detalle": str(error)}
             fallida = {
