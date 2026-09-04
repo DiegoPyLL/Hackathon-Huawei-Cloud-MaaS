@@ -101,7 +101,7 @@ demostrar.
 
 ## Bloque 3 — Los bugs visibles (baratos, los ve cualquiera)
 
-- [ ] **N-09 · El dashboard dice `unhealthy` con las barras en verde**
+- [x] **N-09 · El dashboard dice `unhealthy` con las barras en verde**
   `projects/devchat-generator/demo/live_server.py:345`.
   `health` se marca `unhealthy` ante cualquier alerta `firing` y solo se limpia
   con una `resolved` del mismo servicio. Como las firing dominan, en un minuto

@@ -194,3 +194,12 @@ Si el JSON no parsea o no valida, reintenta una vez devolviendo el error concret
 Verificación: compuerta verde, 200 tests (+1).
 Nota: mismo patrón que el triage — un especialista que devuelve JSON inválido la
 primera vez y válido la segunda ahora produce un hallazgo completado, no fallido.
+
+## N-09 · Dashboard unhealthy con barras en verde · 09:10
+Estado: HECHA
+Commit: 3f59c3e
+Qué cambió: _derivar_health(metrics) deriva health de las métricas mostradas
+(latency > 800, error_rate > 0.05, disk > 85) en vez de un flag pegajoso.
+Verificación: compuerta verde, 205 tests (+5).
+Nota: las alertas firing ya actualizan las métricas, y health se recalcula
+después. Un servicio con métricas sanas pero alerta firing ya no se ve rojo.
