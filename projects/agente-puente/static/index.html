@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trazabilidad y conversión — Incident Response Agent</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #1a1d27; --border: #2a2d3a;
+    --text: #e4e4e7; --text-dim: #71717a;
+    --accent: #6366f1; --green: #22c55e; --red: #ef4444;
+    --orange: #f97316; --yellow: #eab308; --cyan: #06b6d4;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px;
+  }
+  header {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 12px 20px; display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 16px; }
+  header .sub { color: var(--text-dim); font-size: 12px; }
+  .grow { flex: 1; }
+  .btn {
+    background: var(--accent); color: #fff; border: none;
+    padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .estado {
+    font-size: 12px; padding: 3px 10px; border-radius: 10px;
+    background: var(--border); color: var(--text-dim);
+  }
+  .estado.corriendo { background: rgba(99,102,241,0.2); color: var(--accent); }
+  .estado.terminada { background: rgba(34,197,94,0.15); color: var(--green); }
+  .estado.fallida { background: rgba(239,68,68,0.2); color: var(--red); }
+
+  main { padding: 20px; display: grid; gap: 20px; max-width: 1500px; margin: 0 auto; }
+  section {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px;
+  }
+  h2 { font-size: 14px; margin-bottom: 4px; }
+  h2 + .hint { color: var(--text-dim); font-size: 12px; margin-bottom: 14px; }
+
+  /* --- embudo --- */
+  .etapa { display: grid; grid-template-columns: 250px 60px 1fr 130px; gap: 12px; align-items: center; margin-bottom: 7px; }
+  .etapa .nombre { font-size: 12px; }
+  .etapa .cant { font-variant-numeric: tabular-nums; font-weight: 700; text-align: right; font-size: 13px; }
+  .barra { height: 20px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+  .barra-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--cyan)); transition: width .4s; }
+  .etapa .caida { font-size: 11px; color: var(--red); }
+  .etapa .caida.ok { color: var(--text-dim); }
+  .resumen-conv {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border);
+    display: flex; gap: 28px; flex-wrap: wrap;
+  }
+  .kpi .v { font-size: 24px; font-weight: 700; }
+  .kpi .k { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+  .kpi .v.bien { color: var(--green); } .kpi .v.mal { color: var(--red); } .kpi .v.medio { color: var(--yellow); }
+
+  /* --- tablas --- */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--text-dim); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); text-transform: uppercase; font-size: 10px; letter-spacing: .5px; }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  code { font-family: "SF Mono", Consolas, monospace; font-size: 11px; color: var(--cyan); }
+
+  /* --- linaje --- */
+  .linaje-card {
+    border: 1px solid var(--border); border-left: 3px solid var(--green);
+    border-radius: 5px; padding: 12px 14px; margin-bottom: 10px; background: var(--bg);
+  }
+  .linaje-card.perdido { border-left-color: var(--red); }
+  .linaje-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .linaje-head .id { font-weight: 700; font-size: 13px; }
+  .pasos { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+  .paso {
+    font-size: 11px; padding: 3px 9px; border-radius: 3px;
+    background: rgba(34,197,94,0.13); color: var(--green); border: 1px solid rgba(34,197,94,0.3);
+  }
+  .paso.no { background: rgba(239,68,68,0.12); color: var(--red); border-color: rgba(239,68,68,0.3); }
+  .paso.dudoso { background: rgba(234,179,8,0.12); color: var(--yellow); border-color: rgba(234,179,8,0.3); }
+  .paso .flecha { color: var(--text-dim); margin: 0 2px; }
+  .detalle { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+  .detalle b { color: var(--text); font-weight: 600; }
+  .tag {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+    padding: 2px 7px; border-radius: 3px; background: var(--border); color: var(--text-dim);
+  }
+  .tag.critica, .tag.alta { background: var(--red); color: #fff; }
+  .tag.media { background: var(--orange); color: #000; }
+  .tag.baja { background: var(--border); color: var(--text-dim); }
+  .vacio { color: var(--text-dim); font-size: 12px; padding: 12px 0; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Trazabilidad y conversión</h1>
+    <div class="sub">Lo que pasa de verdad vs. lo que el agente procesa · el agente nunca ve esta pantalla</div>
+  </div>
+  <div class="grow"></div>
+  <span class="estado" id="estado">—</span>
+  <button class="btn" id="disparar">Disparar corrida</button>
+</header>
+
+<main>
+  <section>
+    <h2>Conversión</h2>
+    <div class="hint">Cuántos problemas reales sobreviven cada salto, desde que nacen en el bus hasta que el agente propone una corrección.</div>
+    <div id="embudo"><div class="vacio">Sin datos todavía.</div></div>
+    <div class="resumen-conv" id="kpis"></div>
+  </section>
+
+  <section>
+    <h2>Trazabilidad por pantalla</h2>
+    <div class="hint">Qué publicó cada canal. A propósito no todos reportan todo: esa asimetría es la que obliga al agente a correlacionar de verdad.</div>
+    <table>
+      <thead><tr><th>Pantalla</th><th>Puerto</th><th>Líneas</th><th>Cobertura</th><th>Publicó</th><th>No publicó</th></tr></thead>
+      <tbody id="pantallas"></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Linaje de cada problema</h2>
+    <div class="hint">De dónde salió y hasta dónde llegó. La atribución es exacta: cada línea del bus pertenece a un solo incidente, así que la evidencia que cita el agente dice qué estaba mirando.</div>
+    <div id="linaje"><div class="vacio">Sin datos todavía.</div></div>
+  </section>
+
+  <section>
+    <h2>Ruido y falsos positivos</h2>
+    <div class="hint">Detectar todo lo real no basta si además se inventan incidentes. Esto no entra en el embudo porque no nace de ningún problema real.</div>
+    <div id="ruido"><div class="vacio">Sin datos todavía.</div></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const pct = (v) => v === null || v === undefined ? "—" : `${Math.round(v * 100)}%`;
+
+function setEstado(estado) {
+  const el = $("estado");
+  const texto = {
+    sin_corrida: "sin corrida", corriendo: "corriendo…",
+    terminada: "corrida terminada", fallida: "corrida fallida",
+    ya_hay_una_corriendo: "corriendo…",
+  }[estado] || estado;
+  el.textContent = texto;
+  el.className = "estado " + (estado === "corriendo" || estado === "ya_hay_una_corriendo" ? "corriendo"
+    : estado === "terminada" ? "terminada" : estado === "fallida" ? "fallida" : "");
+  $("disparar").disabled = (estado === "corriendo" || estado === "ya_hay_una_corriendo");
+}
+
+function renderEmbudo(embudo) {
+  const cont = $("embudo");
+  if (!embudo || !embudo.etapas || !embudo.total) {
+    cont.innerHTML = '<div class="vacio">No hay incidentes vivos en el bus.</div>';
+    $("kpis").innerHTML = "";
+    return;
+  }
+  cont.innerHTML = "";
+  embudo.etapas.forEach((e) => {
+    const row = document.createElement("div");
+    row.className = "etapa";
+    const caida = e.caida > 0
+      ? `<span class="caida">−${e.caida} en este salto</span>`
+      : `<span class="caida ok">sin pérdida</span>`;
+    row.innerHTML = `
+      <span class="nombre">${e.etiqueta}</span>
+      <span class="cant">${e.cantidad}/${embudo.total}</span>
+      <div class="barra"><div class="barra-fill" style="width:${Math.round(e.sobre_total * 100)}%"></div></div>
+      ${caida}`;
+    cont.append(row);
+  });
+
+  const conv = embudo.conversion_global;
+  const clase = conv >= 0.8 ? "bien" : conv >= 0.5 ? "medio" : "mal";
+  const perdidas = Object.entries(embudo.perdidas_por_salto || {});
+  $("kpis").innerHTML = `
+    <div class="kpi"><div class="v ${clase}">${pct(conv)}</div><div class="k">Conversión a diagnóstico</div></div>
+    <div class="kpi"><div class="v">${embudo.total}</div><div class="k">Problemas reales vivos</div></div>
+    ${perdidas.map(([salto, n]) =>
+      `<div class="kpi"><div class="v mal">${n}</div><div class="k">perdidos en ${salto}</div></div>`).join("")}`;
+}
+
+function renderPantallas(filas) {
+  const tb = $("pantallas");
+  tb.innerHTML = "";
+  (filas || []).forEach((f) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${f.pantalla}${f.disponible ? "" : ' <span class="tag">no disponible</span>'}</td>
+      <td><code>:${f.puerto}</code></td>
+      <td>${f.lineas_recogidas}</td>
+      <td>${pct(f.cobertura)}</td>
+      <td>${f.incidentes_publicados.join(", ") || "—"}</td>
+      <td style="color:var(--text-dim)">${f.incidentes_no_publicados.join(", ") || "—"}</td>`;
+    tb.append(tr);
+  });
+}
+
+function paso(ok, texto) {
+  const clase = ok === true ? "" : ok === null ? " dudoso" : " no";
+  return `<span class="paso${clase}">${texto}</span>`;
+}
+
+function renderLinaje(linaje) {
+  const cont = $("linaje");
+  if (!linaje || !linaje.length) {
+    cont.innerHTML = '<div class="vacio">No hay incidentes vivos en el bus. Provocá uno desde :8010.</div>';
+    return;
+  }
+  cont.innerHTML = "";
+  linaje.forEach((f) => {
+    const card = document.createElement("div");
+    card.className = "linaje-card" + (f.perdido_en ? " perdido" : "");
+
+    const pasos = [
+      paso(f.canales_que_lo_publicaron.length > 0, `emitido por ${f.canales_que_lo_publicaron.length} canal(es)`),
+      paso(f.lineas_en_volcado > 0, `${f.lineas_en_volcado}/${f.lineas_emitidas} líneas al volcado`),
+      paso(f.detectado, f.detectado ? `detectado ${f.detectado_como}` : "no detectado"),
+      paso(f.tipo_correcto, f.tipo_correcto ? `tipo ${f.tipo_real}` : `dijo ${f.tipo_agente || "—"}`),
+      paso(f.ruteo_correcto, f.ruteo_correcto ? `ruteo ${f.ruteo_esperado}` : `esperaba ${f.ruteo_esperado || "—"}`),
+      paso(f.diagnosticado, f.diagnosticado ? `diagnosticado` : "sin causa raíz"),
+    ];
+    if (f.accion_esperada || f.accion_propuesta) {
+      pasos.push(paso(f.accion_correcta,
+        f.accion_propuesta ? `${f.accion_propuesta}` : `esperaba ${f.accion_esperada}`));
+    }
+
+    let detalle = `<b>${f.servicio}</b> · panel <b>${f.panel_semaforo}</b> · escenario <code>${f.escenario}</code>`;
+    if (f.detectado) {
+      detalle += `<br>El agente lo tituló: “${f.titulo_agente || "—"}”`;
+      detalle += `<br>Evidencia anclada al volcado: <b>${f.citas_ancladas}</b> de ${f.citas_ancladas + f.citas_no_ancladas}`;
+      if (f.especialistas_que_respondieron.length) {
+        detalle += ` · diagnosticado por <b>${f.especialistas_que_respondieron.join(", ")}</b> (confianza ${f.confianza})`;
+      }
+      if (f.causa_raiz) detalle += `<br>Causa raíz: ${f.causa_raiz}`;
+      if (f.params_propuestos) {
+        detalle += `<br>Acción propuesta: <code>${f.accion_propuesta}</code> <code>${JSON.stringify(f.params_propuestos)}</code>`;
+      }
+    }
+    if (f.perdido_en) detalle += `<br><span style="color:var(--red)">Se perdió en: <b>${f.perdido_en}</b></span>`;
+
+    card.innerHTML = `
+      <div class="linaje-head">
+        <span class="id">${f.incidente_real}</span>
+        <span class="tag ${f.severidad_real}">${f.severidad_real}</span>
+        <span class="tag">${f.tipo_real}</span>
+      </div>
+      <div class="pasos">${pasos.join('<span class="flecha">›</span>')}</div>
+      <div class="detalle">${detalle}</div>`;
+    cont.append(card);
+  });
+}
+
+function renderRuido(r) {
+  const cont = $("ruido");
+  if (!r) { cont.innerHTML = '<div class="vacio">Sin datos.</div>'; return; }
+  const falsos = r.detalle_falsos_positivos || [];
+  cont.innerHTML = `
+    <div class="resumen-conv" style="margin:0;padding:0;border:none">
+      <div class="kpi"><div class="v">${r.lineas_recogidas}</div><div class="k">líneas recogidas</div></div>
+      <div class="kpi"><div class="v">${r.detecciones_totales}</div><div class="k">detecciones del agente</div></div>
+      <div class="kpi"><div class="v ${r.falsos_positivos ? "mal" : "bien"}">${r.falsos_positivos}</div><div class="k">falsos positivos</div></div>
+      <div class="kpi"><div class="v ${r.precision >= 0.8 ? "bien" : "medio"}">${pct(r.precision)}</div><div class="k">precisión</div></div>
+      <div class="kpi"><div class="v">${r.descartes_declarados}</div><div class="k">descartes declarados</div></div>
+    </div>
+    ${falsos.length ? `<div class="detalle" style="margin-top:12px">Inventados: ${falsos.map((f) =>
+      `<code>${f.id}</code>`).join(", ")} — ninguna de sus citas ancla contra una línea real del bus.</div>` : ""}`;
+}
+
+async function refrescar() {
+  try {
+    const res = await fetch("/api/trazabilidad");
+    const data = await res.json();
+    setEstado(data.estado_corrida);
+    const t = data.trazabilidad || {};
+    renderEmbudo(t.embudo);
+    renderPantallas(t.por_pantalla);
+    renderLinaje(t.linaje);
+    renderRuido(t.ruido);
+  } catch (error) {
+    $("estado").textContent = "puente no disponible";
+    $("estado").className = "estado fallida";
+  }
+}
+
+$("disparar").onclick = async () => {
+  $("disparar").disabled = true;
+  await fetch("/api/corrida/disparar", { method: "POST" });
+  setEstado("corriendo");
+  refrescar();
+};
+
+refrescar();
+setInterval(refrescar, 4000);
+</script>
+</body>
+</html>
