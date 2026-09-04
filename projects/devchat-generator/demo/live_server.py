@@ -302,6 +302,16 @@ async def email_loop():
 
 _monitoring_metrics: dict[str, dict] = {}
 
+def _derivar_health(metrics: dict) -> str:
+    """N-09: health se deriva de las métricas mostradas, no de un flag pegajoso.
+
+    unhealthy si latency > 800 o error_rate > 0.05 o disk > 85.
+    """
+    if metrics.get("latency", 0) > 800: return "unhealthy"
+    if metrics.get("error_rate", 0) > 0.05: return "unhealthy"
+    if metrics.get("disk", 0) > 85: return "unhealthy"
+    return "healthy"
+
 async def monitoring_loop():
     while True:
         lo, hi = SPEED_MON[_speed_mode]
@@ -342,12 +352,11 @@ async def monitoring_loop():
                 _monitoring_metrics[servicio]["disk"] = int(metric_value)
             elif "error" in metric_name.lower():
                 _monitoring_metrics[servicio]["error_rate"] = round(metric_value, 2)
-            _monitoring_metrics[servicio]["health"] = "unhealthy"
         else:
-            _monitoring_metrics[servicio]["health"] = "healthy"
             _monitoring_metrics[servicio]["latency"] = random.randint(200, 400)
             _monitoring_metrics[servicio]["error_rate"] = round(random.uniform(0.005, 0.02), 3)
             _monitoring_metrics[servicio]["disk"] = random.randint(30, 60)
+        _monitoring_metrics[servicio]["health"] = _derivar_health(_monitoring_metrics[servicio])
 
         event = {
             "type": "monitoring",
