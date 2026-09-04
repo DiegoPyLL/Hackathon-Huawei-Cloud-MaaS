@@ -61,7 +61,7 @@ demostrar.
 
 ## Bloque 2 — Fiabilidad y anti-alucinación
 
-- [ ] **N-05 · Anclar también la evidencia del triage**
+- [x] **N-05 · Anclar también la evidencia del triage**
   `src/maas_demo/orchestrator.py` (`validate_triage`).
   El anclaje literal se aplicó a `validate_finding` pero **no** a
   `validate_triage`, así que las tarjetas de incidentes detectados en `:8080` no
