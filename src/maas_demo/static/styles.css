@@ -118,3 +118,10 @@ h3 { margin: 0 0 12px; font-size: 0.82rem; text-transform: uppercase; letter-spa
 
 .metrics { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 780px) { .metrics { grid-template-columns: repeat(2, 1fr); } }
+
+.budget-bar { display: flex; align-items: center; gap: 10px; margin: 14px 0; }
+.budget-label { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.budget-track { flex: 1; height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.budget-fill { height: 100%; width: 100%; border-radius: 999px; background: #72e2a4; transition: width 0.1s linear; }
+.budget-fill[data-state="agotado"] { background: var(--red); }
+.budget-text { font-size: 0.78rem; color: var(--muted); min-width: 4em; text-align: right; }

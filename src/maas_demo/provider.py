@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterator, Sequence
@@ -172,9 +173,14 @@ class MaaSProvider:
         received_content = False
         request_id = None
         usage = None
+        wall_start = time.perf_counter()
         try:
             with self.opener(request, timeout=self.timeout_seconds) as response:
                 for raw_line in response:
+                    if time.perf_counter() - wall_start > self.timeout_seconds:
+                        raise ProviderError(
+                            f"Huawei MaaS superó el plazo de reloj de {self.timeout_seconds:g}s sin cerrar el stream."
+                        )
                     line = raw_line.decode("utf-8").strip()
                     if not line or line.startswith(":") or not line.startswith("data:"):
                         continue

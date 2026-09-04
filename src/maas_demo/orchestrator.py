@@ -7,7 +7,7 @@ import time
 import uuid
 import urllib.error
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -21,6 +21,7 @@ MAX_INCIDENTS = 6
 MAX_SPECIALISTS = 2
 MAX_CALLS = 8
 MAX_PARALLEL = 3
+PRESUPUESTO_CORRIDA_SEG = 150.0
 ACTION_CATALOG = {
     "cerrar_alerta_falsa": ("bajo", False), "anotar_incidente": ("bajo", False),
     "bloquear_ip": ("medio", True), "revocar_sesion": ("medio", True),
@@ -226,9 +227,10 @@ def build_tasks(triage: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict
     return tasks, deferred
 
 class Orchestrator:
-    def __init__(self, config: Any, store: MemoryStore | None = None):
+    def __init__(self, config: Any, store: MemoryStore | None = None, *, presupuesto_seg: float = PRESUPUESTO_CORRIDA_SEG):
         self.config = config
         self.store = store or MemoryStore()
+        self.presupuesto_seg = presupuesto_seg
         self.models = {"triage": config.modelo_triage or config.model, "especialista": config.modelo_especialista or config.model, "consolidacion": config.modelo_consolidacion or config.model}
 
     def _provider(self, phase: str) -> ChatProvider:
@@ -266,6 +268,10 @@ class Orchestrator:
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("El registro necesita un prompt no vacío.")
         yield {"type": "fase", "fase": "ingesta", "estado": "ok", "run_id": run_id}
+
+        def presupuesto_restante() -> float:
+            return self.presupuesto_seg - (time.perf_counter() - started)
+
         def call(phase: str, messages: list[dict[str, str]], structured: bool = True) -> tuple[Any, dict[str, Any]]:
             begin = time.perf_counter()
             try:
@@ -291,6 +297,12 @@ class Orchestrator:
         yield {"type": "triage", "run_id": run_id, "incidentes": triage["incidentes"], "descartados": triage["descartados"], "diferidos": deferred}
         yield {"type": "fase", "fase": "despacho", "estado": "ok", "run_id": run_id}
         findings: list[dict[str, Any]] = []
+        presupuesto_agotado = False
+        if tasks and presupuesto_restante() <= 0:
+            presupuesto_agotado = True
+            for task in tasks:
+                deferred.append({"incidente_id": task["incident"]["id"], "motivo": "Presupuesto de corrida agotado antes de despachar especialistas."})
+            tasks = []
         def execute(task: dict[str, Any]) -> dict[str, Any]:
             incident, specialist = task["incident"], task["specialist"]
             yield_event = {"type": "tarea", "run_id": run_id, "incidente_id": incident["id"], "especialista": specialist, "estado": "iniciada"}
@@ -300,26 +312,47 @@ class Orchestrator:
                 return validate_finding(value, incident, specialist) | {"_start": yield_event}
             except Exception as error:
                 return {"version": "1", "incidente_id": incident["id"], "especialista": specialist, "estado": "fallido", "error": str(error), "_start": yield_event}
-        with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as pool:
-            futures = [pool.submit(execute, task) for task in tasks]
-            for future in as_completed(futures):
-                finding = future.result()
-                yield finding.pop("_start")
-                finding["estado"] = finding.get("estado", "completado")
-                findings.append(finding)
-                action = finding.get("accion")
-                if finding["estado"] == "completado" and action:
-                    risk, requires_approval = ACTION_CATALOG[action["action_id"]]
-                    approval = {"id": str(uuid.uuid4()), "run_id": run_id, "hallazgo_id": finding["incidente_id"], "action_id": action["action_id"], "params": action["params"], "riesgo": risk, "estado": "pendiente" if requires_approval else "registrada"}
-                    self.store.approvals[approval["id"]] = approval
-                    yield {"type": "aprobacion", "run_id": run_id, "aprobacion_id": approval["id"], "action_id": approval["action_id"], "riesgo": risk} if requires_approval else {"type": "accion_registrada", "run_id": run_id, "action_id": approval["action_id"]}
-                yield {"type": "hallazgo", "run_id": run_id, "hallazgo": finding}
-                yield {"type": "tarea", "run_id": run_id, "incidente_id": finding["incidente_id"], "especialista": finding["especialista"], "estado": finding["estado"]}
-        payload = json.dumps({"triage": triage, "hallazgos": findings, "diferidos": deferred}, ensure_ascii=False)
-        report, consolidation_meta = call("consolidacion", [{"role": "system", "content": CONSOLIDACION_PROMPT}, {"role": "user", "content": payload}], structured=False)
-        for chunk in [report[i:i+256] for i in range(0, len(report), 256)]: yield {"type": "delta", "delta": chunk}
+        pool = ThreadPoolExecutor(max_workers=MAX_PARALLEL)
+        futures = {pool.submit(execute, task) for task in tasks}
+        try:
+            while futures:
+                restante = max(0.0, presupuesto_restante())
+                done, futures = wait(futures, timeout=restante)
+                if not done:
+                    presupuesto_agotado = True
+                    for pending in futures:
+                        pending.cancel()
+                    break
+                for future in done:
+                    finding = future.result()
+                    yield finding.pop("_start")
+                    finding["estado"] = finding.get("estado", "completado")
+                    findings.append(finding)
+                    action = finding.get("accion")
+                    if finding["estado"] == "completado" and action:
+                        risk, requires_approval = ACTION_CATALOG[action["action_id"]]
+                        approval = {"id": str(uuid.uuid4()), "run_id": run_id, "hallazgo_id": finding["incidente_id"], "action_id": action["action_id"], "params": action["params"], "riesgo": risk, "estado": "pendiente" if requires_approval else "registrada"}
+                        self.store.approvals[approval["id"]] = approval
+                        yield {"type": "aprobacion", "run_id": run_id, "aprobacion_id": approval["id"], "action_id": approval["action_id"], "riesgo": risk} if requires_approval else {"type": "accion_registrada", "run_id": run_id, "action_id": approval["action_id"]}
+                    yield {"type": "hallazgo", "run_id": run_id, "hallazgo": finding}
+                    yield {"type": "tarea", "run_id": run_id, "incidente_id": finding["incidente_id"], "especialista": finding["especialista"], "estado": finding["estado"]}
+                    if presupuesto_restante() <= 0:
+                        presupuesto_agotado = True
+                        for pending in futures:
+                            pending.cancel()
+                        break
+        finally:
+            pool.shutdown(wait=not presupuesto_agotado)
+        if presupuesto_agotado:
+            yield {"type": "fase", "fase": "presupuesto_agotado", "estado": "ok", "run_id": run_id}
+        if presupuesto_restante() > 0:
+            payload = json.dumps({"triage": triage, "hallazgos": findings, "diferidos": deferred}, ensure_ascii=False)
+            report, consolidation_meta = call("consolidacion", [{"role": "system", "content": CONSOLIDACION_PROMPT}, {"role": "user", "content": payload}], structured=False)
+            for chunk in [report[i:i+256] for i in range(0, len(report), 256)]: yield {"type": "delta", "delta": chunk}
+        else:
+            report = "Corrida entregada parcialmente: el presupuesto de reloj se agotó antes de la consolidación."
         failed = [x for x in findings if x.get("estado") == "fallido"]
-        result = {"run_id": run_id, "mode": self.config.mode, "datos": "SUPABASE" if self.config.supabase_url and self.config.supabase_key else "NO CONFIGURADO", "status": "parcial" if deferred or failed else "completada", "triage": triage, "hallazgos": findings, "diferidos": deferred, "reporte": report, "modelos": self.models, "llamadas": 2 + len(tasks), "latency_ms": round((time.perf_counter()-started)*1000), "fallidos": len(failed), "aprobaciones": [x for x in self.store.approvals.values() if x.get("run_id") == run_id], "trazas": [t.__dict__ for t in traces]}
+        result = {"run_id": run_id, "mode": self.config.mode, "datos": "SUPABASE" if self.config.supabase_url and self.config.supabase_key else "NO CONFIGURADO", "status": "parcial" if deferred or failed or presupuesto_agotado else "completada", "triage": triage, "hallazgos": findings, "diferidos": deferred, "reporte": report, "modelos": self.models, "llamadas": 2 + len(tasks), "latency_ms": round((time.perf_counter()-started)*1000), "fallidos": len(failed), "aprobaciones": [x for x in self.store.approvals.values() if x.get("run_id") == run_id], "trazas": [t.__dict__ for t in traces]}
         self.store.save(result)
         self._persist(result)
         yield {"type": "done", **{k: result[k] for k in ("run_id", "mode", "status", "modelos", "llamadas", "latency_ms", "diferidos", "fallidos")}}
