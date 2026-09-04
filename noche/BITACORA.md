@@ -38,3 +38,27 @@ agotado, 0 fallidos, 2 diferidos. Conversión global 0.0 — los 2 incidentes
 detectados no llegaron a diagnosticados porque el presupuesto se agotó antes
 de despachar especialistas. No subí más el presupuesto por mi cuenta. La
 latencia real sugiere que el cuello sigue en el triage (8 llamadas en 150s).
+
+## R-11 · Plazo por llamada acotado al presupuesto · 04:35
+Estado: HECHA
+Commit: be2fae5
+Autor: relevo (Claude) — SIN REVISIÓN INDEPENDIENTE
+Qué cambió: el plazo efectivo de cada llamada es min(timeout, presupuesto
+restante); un fallo de triage produce un `done` con status "fallida", motivo y
+trazas en vez de una excepción que escapa.
+Verificación: compuerta verde, 163 tests (+3). Validado además contra live: la
+corrida ya no se evapora, devuelve `done` consultable.
+Nota: se adaptó la firma de tres dobles `_provider` en tests existentes. Sus
+aserciones no se tocaron.
+
+## N-02 · Corrida live de control · 04:42
+Estado: BLOQUEADA
+Autor: relevo (Claude) — SIN REVISIÓN INDEPENDIENTE
+Motivo: el triage live no llega a entregar. Dos corridas reales con el
+presupuesto ya en 300s y `/api/health` verificado (`presupuesto_seg: 300.0`):
+  1ª — plazo de reloj de 180s agotado en el triage, corrida perdida entera.
+  2ª — con R-11 puesto: `done` limpio con status "fallida" a los 144s, motivo
+       "Expecting property name enclosed in double quotes: line 3 column 2".
+La segunda no es un timeout: el modelo devolvió JSON malformado. Y ese caso NO
+tiene reintento (ver R-12). Estaba marcada [x] por error; se desmarcó.
+Embudo en ambas: 4/4 recogidos → 0/4 detectados, todo perdido en triage.
