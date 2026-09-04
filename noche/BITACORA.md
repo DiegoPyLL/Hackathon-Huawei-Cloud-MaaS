@@ -185,3 +185,12 @@ Nota: conservativo — prefiere bloquear una acción dudosa antes que dejar pasa
 una acción con evidencia inventada. La excepción (cita irrelevante) evita
 falsos negativos cuando el especialista cita de más pero los IDs que usa están
 respaldados.
+
+## N-08 · Reintento de especialistas · 08:55
+Estado: HECHA
+Commit: d6fad8c
+Qué cambió: execute() pide el texto crudo y parsea aparte (igual que el triage).
+Si el JSON no parsea o no valida, reintenta una vez devolviendo el error concreto.
+Verificación: compuerta verde, 200 tests (+1).
+Nota: mismo patrón que el triage — un especialista que devuelve JSON inválido la
+primera vez y válido la segunda ahora produce un hallazgo completado, no fallido.

@@ -90,7 +90,7 @@ demostrar.
   decisión en el docstring: es un criterio, no una obviedad, y tiene que quedar
   por escrito por qué se eligió.
 
-- [ ] **N-08 · Reintento de especialistas**
+- [x] **N-08 · Reintento de especialistas**
   `src/maas_demo/orchestrator.py` (`execute`).
   El triage reintenta una vez devolviendo el error de validación concreto; un
   especialista falla y queda `fallido` a la primera.
