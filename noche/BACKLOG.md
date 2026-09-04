@@ -70,7 +70,7 @@ demostrar.
   `evidencia_verificada` por incidente igual que los hallazgos; `app.js` pinta
   el sello también ahí. Tests.
 
-- [ ] **N-06 · Ampliar el patrón de identificadores**
+- [x] **N-06 · Ampliar el patrón de identificadores**
   `src/maas_demo/orchestrator.py` (`_PATRON_IDENTIFICADOR`).
   Es sensible a mayúsculas y deja huecos: `HOST-12` no matchea contra
   `host-[a-z0-9-]+`, y no cubre formatos que sí aparecen en los escenarios
