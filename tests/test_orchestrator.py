@@ -390,3 +390,49 @@ class AnclajeDeEvidenciaDelTriageTests(unittest.TestCase):
             self._triage(["algo que no esta en el volcado en absoluto, ni parecido"]),
             volcado=self.VOLCADO)
         self.assertEqual(validado["incidentes"][0]["id"], "INC-01")
+
+
+class PatronDeIdentificadoresTests(unittest.TestCase):
+    """N-06: el patron dejaba pasar identificadores que el generador si emite.
+
+    Los prefijos reales salen de la clase `Ids` de
+    projects/monitoreo/generator/generate_monitoreo_dumps.py, que es quien los
+    acuña. El patron anterior cubria DEP, TRX, INC y ALRT, y era sensible a
+    mayusculas: `HOST-12`, que el generador emite asi, no matcheaba contra
+    `host-[a-z0-9-]+` y quedaba sin control.
+    """
+
+    def _params(self, valor):
+        from src.maas_demo.orchestrator import _identificadores_no_anclados
+        return _identificadores_no_anclados({"x": valor}, ["evidencia sin ese id"])
+
+    def test_los_prefijos_que_acuña_el_generador_se_detectan(self):
+        for identificador in ("ALRT-9683", "TRX-4471", "SES-3050", "CRED-2071",
+                              "DEP-404", "CTA-1200", "PED-88304", "HOST-12", "INC-01"):
+            with self.subTest(identificador=identificador):
+                self.assertEqual(self._params(identificador), [identificador],
+                                 f"{identificador} deberia contar como identificador")
+
+    def test_una_ipv4_se_detecta(self):
+        self.assertEqual(self._params("190.20.1.5"), ["190.20.1.5"])
+
+    def test_los_nombres_de_servicio_se_detectan(self):
+        for nombre in ("svc-cache", "host-db01", "pod-api-7"):
+            with self.subTest(nombre=nombre):
+                self.assertEqual(self._params(nombre), [nombre])
+
+    def test_una_palabra_normal_no_se_marca(self):
+        """Sobre-detectar rechazaria acciones legitimas y romperia la corrida."""
+        for texto in ("Credential stuffing horizontal", "24", "checkout",
+                      "revertir el deploy", "alta"):
+            with self.subTest(texto=texto):
+                self.assertEqual(self._params(texto), [],
+                                 f"{texto!r} no es un identificador")
+
+    def test_un_identificador_citado_en_la_evidencia_no_se_marca(self):
+        from src.maas_demo.orchestrator import _identificadores_no_anclados
+        self.assertEqual(
+            _identificadores_no_anclados(
+                {"deploy_id": "DEP-404"},
+                ["evento=deploy release=v360 deploy=DEP-404 componente=checkout"]),
+            [])
