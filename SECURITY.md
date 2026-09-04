@@ -1,6 +1,3 @@
-# TODO(¡Antes de hacer cualquier cosa la documentación del proyecto debe estar en el Vault!!! Avisale al usuario y cuando ya verifiques que la documentación existe en el vault puedes proceder a eliminar este comentario.)
-
-
 # Security Policy and Secure Development Standard
 
 > Reusable security baseline for software repositories.
