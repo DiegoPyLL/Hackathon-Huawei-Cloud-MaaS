@@ -26,3 +26,15 @@ Commit: 2ad6925
 Qué cambió: PRESUPUESTO_CORRIDA_SEG 150→300; /api/health expone presupuesto_seg; app.js lo lee de ahí (fallback 300).
 Verificación: compuerta verde, 160 tests (+1).
 Nota: el front ya no hardcodea el presupuesto; lo toma de /api/health.
+
+## N-02 · Corrida live de control, una sola vez · 01:12
+Estado: HECHA (parcial)
+Commit: 854f0be
+Qué cambió: sin cambios de código. Guardado evals/results/corrida-noche.json.
+Verificación: compuerta verde, 160 tests.
+Nota: stack live, 3 escenarios (caida_tras_deploy, bloqueo_cuenta_masivo,
+disco_motor_datos). La corrida terminó PARCIAL: latency 150012ms, presupuesto
+agotado, 0 fallidos, 2 diferidos. Conversión global 0.0 — los 2 incidentes
+detectados no llegaron a diagnosticados porque el presupuesto se agotó antes
+de despachar especialistas. No subí más el presupuesto por mi cuenta. La
+latencia real sugiere que el cuello sigue en el triage (8 llamadas en 150s).
