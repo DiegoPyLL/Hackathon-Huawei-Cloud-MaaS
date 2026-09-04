@@ -84,6 +84,13 @@
             return 'bg-gray-800 border-gray-600';
         }
 
+        function getStatusTextColor(status) {
+            if (status === 'OPERATIONAL') return 'bg-green-500/20 text-green-400';
+            if (status === 'DEGRADED') return 'bg-yellow-500/20 text-yellow-400';
+            if (status === 'OUTAGE') return 'bg-red-500/20 text-red-400';
+            return 'bg-gray-700 text-gray-300';
+        }
+
         async function fetchMetrics() {
             try {
                 const res = await fetch('/api/metrics');
@@ -104,7 +111,7 @@
                         <div class="card p-5 rounded-xl border-2 ${getStatusColor(metrics.status)}">
                             <div class="flex justify-between items-center mb-4 border-b border-current pb-2">
                                 <h2 class="text-xl font-bold uppercase tracking-wider">${serviceName}</h2>
-                                <span class="text-xs font-black px-2 py-1 rounded bg-current text-white mix-blend-overlay">${metrics.status}</span>
+                                <span class="text-xs font-black px-2 py-1 rounded ${getStatusTextColor(metrics.status)}">${metrics.status}</span>
                             </div>
                             <div class="space-y-2">
                                 ${metricHtml}
