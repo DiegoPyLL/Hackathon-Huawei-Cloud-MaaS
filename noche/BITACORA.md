@@ -92,3 +92,22 @@ Tercera corrida live (con R-12): el pipeline se desbloqueó de verdad.
 Pero no llegó el `done`: la consolidación venció con 41.8s restantes y su
 excepción escapó. Eso es lo que arregla R-13. Falta una cuarta corrida para
 cerrar N-02; no se hizo en este tick por lo largo que venía.
+
+## N-02 · Corrida live de control · 06:20
+Estado: HECHA (parcial, motivo declarado)
+Commit: (el anterior a este)
+Autor: relevo (Claude) — SIN REVISIÓN INDEPENDIENTE
+Qué cambió: sin código. Regenerado evals/results/corrida-noche.json con una
+corrida válida — `presupuesto_seg: 300.0` verificado en /api/health ANTES de
+correr, que es lo que faltó la primera vez (R-05/R-07).
+Verificación: compuerta verde, 166 tests. R-13 confirmado contra live: llegó el
+`done` en vez de perderse la corrida al agotarse el presupuesto.
+Resultado: status parcial, 300009ms, 4/4 detectados, 3/4 tipo correcto, 4/4
+ruteo correcto, 1/4 diagnosticados. Conversión 0.25, precisión 1.0, 0 falsos
+positivos, 5 descartes declarados.
+Nota: termina `parcial` y no `completada`. El criterio de N-02 previa ese caso
+("si sale parcial otra vez, anotá el motivo y seguí"). El motivo está medido en
+las trazas y va como R-14: el triage consume 170.7s de los 300 en UNA llamada,
+así que a los especialistas les quedan ~130s y a la consolidación nada.
+Trazas: triage 170668ms · especialistas 35522/50165/60369/61181/46835ms.
+Ojo: `llamadas` reportó 8 y las trazas son 6 — segunda confirmación de R-01.
