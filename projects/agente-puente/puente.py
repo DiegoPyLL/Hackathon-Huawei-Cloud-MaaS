@@ -42,6 +42,13 @@ AGENTE_URL = os.environ.get("AGENTE_URL", "http://localhost:8080")
 # se deja margen para el resto del cuerpo JSON.
 MAX_BYTES_VOLCADO = 56 * 1024
 
+# Plazo de reloj para una corrida entera, visto desde el puente. Va por encima
+# del presupuesto del orquestador (300s) a proposito: es la red de seguridad por
+# si el agente no cierra el stream, no el limite que gobierna la corrida.
+CORRIDA_MAX_SEG = 420.0
+# Maximo entre dos lecturas del socket. Un stream sano manda algo mucho antes.
+LECTURA_MAX_SEG = 120.0
+
 # El volcado son datos a analizar, nunca instrucciones. La clausula va explicita
 # porque el texto viene de un chat donde cualquiera escribe lo que quiera.
 PREFACIO = (
@@ -127,9 +134,21 @@ def preguntar_al_agente(volcado: str) -> dict:
     resultado = {"triage": None, "hallazgos": [], "aprobaciones": [],
                  "reporte": "", "meta": {}, "error": None}
     texto = []
+    comienzo = time.monotonic()
     try:
-        with urllib.request.urlopen(req, timeout=600) as res:
+        # OJO: el `timeout` de urlopen es el maximo ENTRE LECTURAS del socket,
+        # no un plazo total. Sobre un stream SSE eso no acota nada: mientras el
+        # agente mande un byte de vez en cuando, esto espera para siempre.
+        # Medido: una corrida quedo colgada con el agente sano y la cola vacia.
+        # El plazo de reloj de abajo es el que de verdad la acota.
+        with urllib.request.urlopen(req, timeout=LECTURA_MAX_SEG) as res:
             for raw in res:
+                if time.monotonic() - comienzo > CORRIDA_MAX_SEG:
+                    resultado["error"] = (
+                        f"El agente no cerro la corrida en {CORRIDA_MAX_SEG:g}s. "
+                        "Se corta y se entrega lo recibido hasta aqui."
+                    )
+                    break
                 linea = raw.decode("utf-8").strip()
                 if not linea.startswith("data:"):
                     continue

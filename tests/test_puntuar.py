@@ -106,3 +106,22 @@ class SalidaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlazoDelPuenteTests(unittest.TestCase):
+    """El puente tenia el mismo defecto que el provider: `urlopen(timeout=600)`
+    sobre un stream SSE es un maximo ENTRE LECTURAS, no un plazo total.
+
+    Sintoma medido: una corrida disparada desde :8020 quedo colgada con el
+    agente sano y la cola de aprobaciones vacia. El hilo nunca solto su candado
+    y la pantalla se quedo en "corriendo" indefinidamente.
+    """
+
+    def test_el_puente_declara_un_plazo_de_reloj_por_encima_del_presupuesto(self):
+        puente = cargar("puente", RAIZ / "projects" / "agente-puente" / "puente.py")
+        # La red de seguridad tiene que estar POR ENCIMA del presupuesto del
+        # orquestador (300s): si estuviera por debajo, cortaria corridas sanas.
+        self.assertGreater(puente.CORRIDA_MAX_SEG, 300.0)
+        # Y el maximo entre lecturas, muy por debajo: un stream vivo manda algo
+        # mucho antes de dos minutos.
+        self.assertLess(puente.LECTURA_MAX_SEG, puente.CORRIDA_MAX_SEG)
