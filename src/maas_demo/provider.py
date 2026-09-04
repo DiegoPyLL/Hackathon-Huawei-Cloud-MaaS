@@ -218,12 +218,20 @@ class MaaSProvider:
         }
 
 
-def build_provider(config: Any, model: str | None = None) -> ChatProvider:
+def build_provider(config: Any, model: str | None = None,
+                   timeout_seconds: float | None = None) -> ChatProvider:
+    """`timeout_seconds` acota el plazo de UNA llamada por debajo del de la config.
+
+    Lo usa el orquestador para que ninguna llamada pueda consumir el presupuesto
+    entero de la corrida y encima fallar: el plazo efectivo es el menor entre el
+    configurado y lo que le queda de presupuesto a la corrida.
+    """
     if config.mode == "mock":
         return MockProvider(model=model or config.model)
     return MaaSProvider(
         api_key=config.api_key,
         base_url=config.base_url,
         model=model or config.model,
-        timeout_seconds=config.timeout_seconds,
+        timeout_seconds=min(config.timeout_seconds, timeout_seconds)
+        if timeout_seconds is not None else config.timeout_seconds,
     )

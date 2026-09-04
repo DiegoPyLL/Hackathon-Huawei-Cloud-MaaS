@@ -284,8 +284,8 @@ class Orchestrator:
         self.presupuesto_seg = presupuesto_seg
         self.models = {"triage": config.modelo_triage or config.model, "especialista": config.modelo_especialista or config.model, "consolidacion": config.modelo_consolidacion or config.model}
 
-    def _provider(self, phase: str) -> ChatProvider:
-        return build_provider(self.config, self.models[phase])
+    def _provider(self, phase: str, timeout_seconds: float | None = None) -> ChatProvider:
+        return build_provider(self.config, self.models[phase], timeout_seconds)
 
     def _persist(self, result: dict[str, Any]) -> None:
         if not self.config.supabase_url or not self.config.supabase_key:
@@ -324,26 +324,56 @@ class Orchestrator:
             return self.presupuesto_seg - (time.perf_counter() - started)
 
         def call(phase: str, messages: list[dict[str, str]], structured: bool = True) -> tuple[Any, dict[str, Any]]:
+            # El plazo de la llamada nunca excede lo que le queda a la corrida:
+            # sin esto una sola llamada se come el presupuesto entero y ademas
+            # falla, que es como se perdio la corrida de control de N-02.
             begin = time.perf_counter()
+            # Acotar, no negarse por anticipado: una llamada con poco presupuesto
+            # puede resolverse al instante. Solo se rechaza si no queda nada.
+            plazo = min(self.config.timeout_seconds, max(presupuesto_restante(), 0.0))
+            if plazo <= 0:
+                raise ProviderError(f"Sin presupuesto para la fase {phase}.")
             try:
-                raw, meta = _complete(self._provider(phase), messages)
+                raw, meta = _complete(self._provider(phase, plazo), messages)
                 return (extract_json(raw) if structured else raw), meta
             finally:
                 traces.append(Trace(phase, "inferencia", round((time.perf_counter()-begin)*1000)))
         mensajes_triage = [{"role": "system", "content": TRIAGE_PROMPT}, {"role": "user", "content": prompt}]
-        triage, triage_meta = call("triage", mensajes_triage)
+        # Un triage que no llega a entregar se lleva puesta la corrida entera: sin
+        # incidentes no hay nada que despachar. Pero eso NO es una excepcion que
+        # deba escapar: el cliente tiene que recibir un `done` con el motivo, sus
+        # trazas y su latencia, igual que cualquier otra corrida. Escapar dejaba
+        # la pantalla con las fases sin cerrar y la barra de presupuesto viva.
         try:
-            triage = validate_triage(triage)
-        except ValueError as error:
-            # El contrato manda reintentar una vez devolviendo el error concreto,
-            # en vez de cortar la corrida al primer entregable mal formado.
-            yield {"type": "fase", "fase": "triage", "estado": "reintento", "run_id": run_id, "detalle": str(error)}
-            reintento = mensajes_triage + [
-                {"role": "assistant", "content": json.dumps(triage, ensure_ascii=False)},
-                {"role": "user", "content": f"El entregable no valida: {error}. Corrígelo y devuelve solo el JSON."},
-            ]
-            triage, triage_meta = call("triage", reintento)
-            triage = validate_triage(triage)
+            triage, triage_meta = call("triage", mensajes_triage)
+            try:
+                triage = validate_triage(triage)
+            except ValueError as error:
+                # El contrato manda reintentar una vez devolviendo el error concreto,
+                # en vez de cortar la corrida al primer entregable mal formado.
+                yield {"type": "fase", "fase": "triage", "estado": "reintento", "run_id": run_id, "detalle": str(error)}
+                reintento = mensajes_triage + [
+                    {"role": "assistant", "content": json.dumps(triage, ensure_ascii=False)},
+                    {"role": "user", "content": f"El entregable no valida: {error}. Corrígelo y devuelve solo el JSON."},
+                ]
+                triage, triage_meta = call("triage", reintento)
+                triage = validate_triage(triage)
+        except (ProviderError, ValueError) as error:
+            yield {"type": "fase", "fase": "triage", "estado": "fallida", "run_id": run_id, "detalle": str(error)}
+            fallida = {
+                "run_id": run_id, "mode": self.config.mode, "status": "fallida",
+                "error": str(error), "modelos": self.models, "llamadas": len(traces),
+                "latency_ms": round((time.perf_counter() - started) * 1000),
+                "diferidos": [], "fallidos": 0,
+                "triage": None, "hallazgos": [], "reporte": "",
+                "aprobaciones": [], "trazas": [t.__dict__ for t in traces],
+                "datos": "SUPABASE" if self.config.hay_almacen else "NO CONFIGURADO",
+            }
+            self.store.save(fallida)
+            yield {"type": "done", **{k: fallida[k] for k in (
+                "run_id", "mode", "status", "modelos", "llamadas",
+                "latency_ms", "diferidos", "fallidos")}, "error": str(error)}
+            return
         tasks, deferred = build_tasks(triage)
         yield {"type": "triage", "run_id": run_id, "incidentes": triage["incidentes"], "descartados": triage["descartados"], "diferidos": deferred}
         yield {"type": "fase", "fase": "despacho", "estado": "ok", "run_id": run_id}
