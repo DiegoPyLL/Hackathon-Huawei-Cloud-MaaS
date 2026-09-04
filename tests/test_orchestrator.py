@@ -335,3 +335,58 @@ class ConsolidacionFallidaTests(unittest.TestCase):
         # Y el reporte dice por que no hay reporte, en vez de quedar vacio.
         guardada = orchestrator.store.get(final["run_id"])
         self.assertIn("la consolidación falló", guardada["reporte"])
+
+
+class AnclajeDeEvidenciaDelTriageTests(unittest.TestCase):
+    """N-05: la evidencia del triage tampoco estaba contrastada contra el volcado.
+
+    T5.1 puso el anclaje literal en `validate_finding` pero no en
+    `validate_triage`, asi que en :8080 las tarjetas de hallazgos llevaban sello
+    y las de incidentes detectados no. Un sello a medias es peor que ninguno:
+    sugiere que todo lo que se ve fue verificado.
+    """
+
+    VOLCADO = ("MONITOREO 10:15:03 evento=deploy release=v360 deploy=DEP-404 componente=checkout by=ci-bot | "
+               "MONITOREO 10:16:00 alert=ALRT-9683 endpoint=/checkout status=500 ratio=0.90 ventana=2min")
+
+    def _triage(self, evidencia):
+        return {
+            "version": "1",
+            "incidentes": [{
+                "id": "INC-01", "titulo": "x", "tipo": "indisponibilidad",
+                "canal": "monitoreo", "severidad": "alta", "ataque_activo": False,
+                "evidencia": evidencia, "especialistas": ["sysadmin"],
+                "motivo_ruteo": "disponibilidad",
+            }],
+            "descartados": [],
+        }
+
+    def test_una_cita_textual_del_volcado_queda_sellada(self):
+        cita = "alert=ALRT-9683 endpoint=/checkout status=500 ratio=0.90 ventana=2min"
+        validado = validate_triage(self._triage([cita]), volcado=self.VOLCADO)
+        sellos = validado["incidentes"][0]["evidencia_verificada"]
+        self.assertEqual(len(sellos), 1)
+        self.assertTrue(sellos[0]["verificada"])
+        self.assertNotIn("evidencia_no_verificada", validado["incidentes"][0])
+
+    def test_una_cita_parafraseada_se_marca_no_verificada(self):
+        """El modelo resume en vez de citar: pasa la validacion de forma, no la de fondo."""
+        validado = validate_triage(
+            self._triage(["hubo un pico de errores 500 en checkout tras el deploy"]),
+            volcado=self.VOLCADO)
+        incidente = validado["incidentes"][0]
+        self.assertFalse(incidente["evidencia_verificada"][0]["verificada"])
+        self.assertEqual(len(incidente["evidencia_no_verificada"]), 1)
+
+    def test_sin_volcado_no_se_inventa_un_sello(self):
+        """Sin con que contrastar, no se marca nada: un sello falso es peor que
+        ninguno porque afirma una verificacion que no ocurrio."""
+        validado = validate_triage(self._triage(["lo que sea"]))
+        self.assertNotIn("evidencia_verificada", validado["incidentes"][0])
+
+    def test_el_anclaje_no_convierte_un_triage_valido_en_invalido(self):
+        """Marcar no es rechazar: el triage sigue siendo utilizable."""
+        validado = validate_triage(
+            self._triage(["algo que no esta en el volcado en absoluto, ni parecido"]),
+            volcado=self.VOLCADO)
+        self.assertEqual(validado["incidentes"][0]["id"], "INC-01")

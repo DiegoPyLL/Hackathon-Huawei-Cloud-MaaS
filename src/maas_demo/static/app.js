@@ -117,7 +117,7 @@ function renderIncidents(incidents, discarded, deferred) {
     tags.append(tag(incident.tipo), tag(incident.canal));
     if (incident.ataque_activo) tags.append(tag("ataque activo", "alerta"));
     incident.especialistas.forEach((specialist) => tags.append(tag(specialist, "rol")));
-    card.append(tags, evidenceList(incident.evidencia));
+    card.append(tags, evidenceList(incident.evidencia, incident.evidencia_verificada));
     card.append(element("p", "muted", incident.motivo_ruteo));
     incidentList.append(card);
   });
