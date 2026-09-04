@@ -268,3 +268,70 @@ class ReintentoDeTriageTests(unittest.TestCase):
         self.assertIn("double quotes", final["error"])
         # Exactamente dos intentos: uno y el reintento. Ni mas, ni menos.
         self.assertEqual(registro["llamadas"], 2)
+
+
+class ConsolidacionFallidaTests(unittest.TestCase):
+    """R-13: una consolidacion que falla no puede tirar la corrida entera.
+
+    Sintoma medido en live: con 41.8s de presupuesto restante la consolidacion
+    vencio, la ProviderError escapo de stream() y se perdio una corrida que ya
+    tenia 4 hallazgos y 1 accion esperando aprobacion. El embudo habia llegado a
+    0.75 de conversion. El reporte ejecutivo es lo ultimo y lo mas prescindible
+    de la corrida: no puede llevarse por delante lo que ya salio bien.
+    """
+
+    TRIAGE_VALIDO = json.dumps({
+        "version": "1",
+        "incidentes": [{
+            "id": "INC-01", "titulo": "Caida de checkout", "tipo": "indisponibilidad",
+            "canal": "monitoreo", "severidad": "alta", "ataque_activo": False,
+            "evidencia": ["alert=ALRT-1"], "especialistas": ["sysadmin"],
+            "motivo_ruteo": "disponibilidad",
+        }],
+        "descartados": [],
+    })
+    HALLAZGO_VALIDO = json.dumps({
+        "version": "1", "incidente_id": "INC-01", "especialista": "sysadmin",
+        "causa_raiz": "El deploy rompio checkout.", "confianza": "alta",
+        "evidencia": ["alert=ALRT-1"], "descartado": [],
+        "viabilidad": "requiere_mas_datos", "accion": None,
+    })
+
+    def setUp(self):
+        self.config = Config(mode="mock", api_key=None, base_url="https://unused/v2", model="demo")
+
+    def test_la_corrida_sobrevive_a_una_consolidacion_que_vence(self):
+        estado = {"fase": 0}
+
+        class ConsolidacionRota:
+            def stream(self_inner, messages):
+                estado["fase"] += 1
+                if estado["fase"] == 1:
+                    yield {"type": "delta", "delta": ConsolidacionFallidaTests.TRIAGE_VALIDO}
+                elif estado["fase"] == 2:
+                    yield {"type": "delta", "delta": ConsolidacionFallidaTests.HALLAZGO_VALIDO}
+                else:
+                    raise ProviderError("Huawei MaaS superó el plazo de reloj de 41.7852s sin cerrar el stream.")
+                yield {"type": "done", "mode": "mock", "model": "x"}
+
+        orchestrator = Orchestrator(self.config)
+        orchestrator._provider = lambda phase, timeout_seconds=None: ConsolidacionRota()
+
+        eventos = list(orchestrator.stream({"prompt": "MONITOREO alert=ALRT-1 checkout 500"}))
+
+        final = eventos[-1]
+        self.assertEqual(final["type"], "done")
+        # No se pierde: se entrega parcial, no fallida.
+        self.assertEqual(final["status"], "parcial")
+        # El hallazgo que si salio sigue estando.
+        hallazgos = [e for e in eventos if e["type"] == "hallazgo"]
+        self.assertEqual(len(hallazgos), 1)
+        self.assertEqual(hallazgos[0]["hallazgo"]["causa_raiz"], "El deploy rompio checkout.")
+        # La fase se declara, el motivo no se pierde en silencio.
+        fases = [e for e in eventos
+                 if e["type"] == "fase" and e.get("fase") == "consolidacion"]
+        self.assertEqual(fases[-1]["estado"], "fallida")
+        self.assertIn("plazo de reloj", fases[-1]["detalle"])
+        # Y el reporte dice por que no hay reporte, en vez de quedar vacio.
+        guardada = orchestrator.store.get(final["run_id"])
+        self.assertIn("la consolidación falló", guardada["reporte"])
