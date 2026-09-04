@@ -14,7 +14,7 @@ demostrar.
 
 ## Bloque 1 — Desbloquear la medición
 
-- [ ] **N-01 · Subir el presupuesto de corrida a 300 s**
+- [x] **N-01 · Subir el presupuesto de corrida a 300 s**
   `src/maas_demo/orchestrator.py` (`PRESUPUESTO_CORRIDA_SEG`), `src/maas_demo/static/app.js` (`BUDGET_SECONDS`).
   Medido: una corrida live con 3 incidentes consumió 172 s solo en triage y los
   3 se perdieron con `Presupuesto de corrida agotado antes de despachar
