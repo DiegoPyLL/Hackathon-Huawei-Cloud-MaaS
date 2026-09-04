@@ -23,7 +23,18 @@ MAX_CALLS = 8
 MAX_PARALLEL = 3
 # Cuanto del entregable roto se le devuelve al modelo en el reintento.
 MAX_ECO_REINTENTO = 4000
-PRESUPUESTO_CORRIDA_SEG = 300.0
+# Presupuesto de reloj de una corrida entera. Sale de sumar lo medido con
+# glm-5.2, no de una preferencia:
+#
+#     triage          150-280s  (una sola llamada; escala con los incidentes)
+#     especialistas   35-60s cada uno, de a 3 en paralelo
+#     consolidacion   40-60s
+#
+# Con 300s el triage se comia el presupuesto entero y los especialistas nunca
+# llegaban a correr: la corrida terminaba `parcial` y sin causa raiz. 480 deja
+# terminar una corrida con varios incidentes; con uno o dos termina mucho antes,
+# porque el presupuesto es un techo, no una espera.
+PRESUPUESTO_CORRIDA_SEG = 480.0
 ACTION_CATALOG = {
     "cerrar_alerta_falsa": ("bajo", False), "anotar_incidente": ("bajo", False),
     "bloquear_ip": ("medio", True), "revocar_sesion": ("medio", True),

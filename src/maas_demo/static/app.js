@@ -22,7 +22,7 @@ const SEVERITIES = ["critica", "alta", "media", "baja"];
 const taskNodes = new Map();
 const budgetFill = document.querySelector("#budget-fill");
 const budgetText = document.querySelector("#budget-text");
-let BUDGET_SECONDS = 300; let budgetTimer = null;
+let BUDGET_SECONDS = 480; let budgetTimer = null;
 
 function setMode(mode) {
   modeBadge.textContent = mode === "live" ? "LIVE · Huawei MaaS" : "MOCK · Sin consumo cloud";

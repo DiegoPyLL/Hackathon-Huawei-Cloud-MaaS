@@ -78,7 +78,7 @@ def _ultimas(lineas: list[str], tope: int) -> list[str]:
 # Plazo de reloj para una corrida entera, visto desde el puente. Va por encima
 # del presupuesto del orquestador (300s) a proposito: es la red de seguridad por
 # si el agente no cierra el stream, no el limite que gobierna la corrida.
-CORRIDA_MAX_SEG = 420.0
+CORRIDA_MAX_SEG = 600.0
 # Maximo entre dos lecturas del socket. Tiene que ser MAYOR que una llamada
 # completa al modelo: entre el evento `ingesta` y el `triage` no viaja nada
 # durante todo lo que tarde el triage, que con glm-5.2 son 150-180s. Poner esto

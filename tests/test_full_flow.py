@@ -318,8 +318,19 @@ class HttpEndToEndTests(unittest.TestCase):
         self.assertEqual(status, 200)
         health = json.loads(body)
         self.assertIn("presupuesto_seg", health)
+        # Lo que este test protege de verdad: el front y el back declaran el
+        # MISMO presupuesto. Sin esto, la barra de :8080 miente sobre cuanto
+        # queda. Esta asercion no se toca.
         self.assertEqual(health["presupuesto_seg"], PRESUPUESTO_CORRIDA_SEG)
-        self.assertEqual(PRESUPUESTO_CORRIDA_SEG, 300.0)
+        # El valor concreto subio de 300 a 480 por una medicion, no por gusto:
+        # con 300 el triage (150-280s con glm-5.2) se comia el presupuesto
+        # entero y los especialistas nunca corrian, asi que toda corrida con
+        # varios incidentes terminaba `parcial` y sin causa raiz. 480 = triage
+        # 280 + especialistas ~120 + consolidacion ~60, con margen.
+        self.assertEqual(PRESUPUESTO_CORRIDA_SEG, 480.0)
+        # Y sigue siendo un techo acotado: sin limite superior volveria el
+        # cuelgue de 25 minutos que motivo T4.1.
+        self.assertLessEqual(PRESUPUESTO_CORRIDA_SEG, 600.0)
 
     def test_http_validation_and_size_errors_are_json_400(self):
         for body in (b"not-json", b"[]"):
