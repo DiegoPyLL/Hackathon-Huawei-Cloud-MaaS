@@ -20,6 +20,10 @@ const metric = {
 
 const SEVERITIES = ["critica", "alta", "media", "baja"];
 const taskNodes = new Map();
+const budgetFill = document.querySelector("#budget-fill");
+const budgetText = document.querySelector("#budget-text");
+const BUDGET_SECONDS = 150;
+let budgetTimer = null;
 
 function setMode(mode) {
   modeBadge.textContent = mode === "live" ? "LIVE · Huawei MaaS" : "MOCK · Sin consumo cloud";
@@ -29,6 +33,31 @@ function setMode(mode) {
 function setPhase(phase, state) {
   const step = pipeline.querySelector(`[data-phase="${phase}"]`);
   if (step) step.dataset.state = state;
+}
+
+function startBudget() {
+  stopBudget();
+  const startedAt = performance.now();
+  budgetFill.dataset.state = "activo";
+  budgetTimer = setInterval(() => {
+    const elapsed = (performance.now() - startedAt) / 1000;
+    const remaining = Math.max(0, BUDGET_SECONDS - elapsed);
+    const pct = Math.round((remaining / BUDGET_SECONDS) * 100);
+    budgetFill.style.width = `${pct}%`;
+    budgetText.textContent = `${remaining.toFixed(1)}s`;
+    if (remaining <= 0) stopBudget();
+  }, 100);
+}
+
+function stopBudget() {
+  if (budgetTimer) { clearInterval(budgetTimer); budgetTimer = null; }
+}
+
+function finishBudget(state) {
+  stopBudget();
+  budgetFill.dataset.state = state;
+  budgetFill.style.width = state === "agotado" ? "0%" : "100%";
+  if (state === "agotado") budgetText.textContent = "agotado";
 }
 
 function element(tag, className, text) {
@@ -160,8 +189,9 @@ function renderApproval(event) {
 function consumeEvent(event) {
   if (event.type === "fase") {
     setPhase(event.fase, "activo");
-    if (event.fase === "ingesta") liveLog.textContent = "Volcado recibido, clasificando…";
+    if (event.fase === "ingesta") { liveLog.textContent = "Volcado recibido, clasificando…"; startBudget(); }
     if (event.fase === "despacho") liveLog.textContent = "Despachando especialistas en paralelo…";
+    if (event.fase === "presupuesto_agotado") { liveLog.textContent = "Presupuesto de corrida agotado — entregando resultado parcial."; finishBudget("agotado"); }
   }
   if (event.type === "triage") {
     setPhase("ingesta", "ok");
@@ -191,6 +221,7 @@ function consumeEvent(event) {
     ["ingesta", "triage", "despacho", "consolidacion"].forEach((phase) => setPhase(phase, "ok"));
     status.textContent = event.status === "completada" ? "Completado" : "Parcial";
     liveLog.textContent = `Corrida ${event.run_id.slice(0, 8)} · ${event.fallidos} fallidos · ${event.diferidos.length} diferidos`;
+    finishBudget(event.status === "completada" ? "ok" : "agotado");
     metric.mode.textContent = event.mode;
     metric.model.textContent = event.modelos.triage;
     metric.calls.textContent = String(event.llamadas);
@@ -214,6 +245,10 @@ function reset() {
   pipeline.querySelectorAll("[data-phase]").forEach((step) => delete step.dataset.state);
   metric.latency.textContent = "—";
   metric.calls.textContent = "—";
+  stopBudget();
+  budgetFill.style.width = "100%";
+  budgetFill.dataset.state = "";
+  budgetText.textContent = "—";
 }
 
 async function investigateIncident() {
