@@ -19,6 +19,7 @@ from src.maas_demo.config import Config, ConfigError
 try:
     from src.maas_demo.orchestrator import (
         ACTION_CATALOG,
+        PRESUPUESTO_CORRIDA_SEG,
         Orchestrator,
         validate_finding,
         validate_triage,
@@ -27,6 +28,7 @@ try:
 except ImportError:  # aun vive en la rama agente-orquestrador-*, no en main
     HAY_ORQUESTADOR = False
     ACTION_CATALOG = {}
+    PRESUPUESTO_CORRIDA_SEG = 0
     Orchestrator = None
     validate_finding = validate_triage = None
 
@@ -306,6 +308,16 @@ class HttpEndToEndTests(unittest.TestCase):
         self.assertEqual(headers["X-Frame-Options"], "DENY")
         self.assertEqual(self.request("/does-not-exist")[0], HTTPStatus.NOT_FOUND)
         self.assertEqual(self.request("/")[0], HTTPStatus.OK)
+
+    @unittest.skipUnless(HAY_ORQUESTADOR, SIN_ORQUESTADOR)
+    def test_health_exposes_presupuesto_that_matches_orchestrator_constant(self):
+        """N-01: /api/health trae presupuesto_seg y coincide con la constante del back."""
+        status, _, body = self.request("/api/health")
+        self.assertEqual(status, 200)
+        health = json.loads(body)
+        self.assertIn("presupuesto_seg", health)
+        self.assertEqual(health["presupuesto_seg"], PRESUPUESTO_CORRIDA_SEG)
+        self.assertEqual(PRESUPUESTO_CORRIDA_SEG, 300.0)
 
     def test_http_validation_and_size_errors_are_json_400(self):
         for body in (b"not-json", b"[]"):
