@@ -242,7 +242,8 @@ class OrchestratorContractTests(unittest.TestCase):
         finding["evidencia"] = ["alert=ALRT-1 203.0.113.5"]
 
         class Controlled(Orchestrator):
-            def _provider(self, phase):
+            # R-11: _provider recibe ademas el plazo acotado al presupuesto.
+            def _provider(self, phase, timeout_seconds=None):
                 value = triage if phase == "triage" else finding if phase == "especialista" else "Reporte final"
                 return type("P", (), {"stream": lambda self, messages: event_stream(value, mode="mock")})()
 
@@ -262,7 +263,8 @@ class OrchestratorContractTests(unittest.TestCase):
         incident = triage["incidentes"][0]
 
         class Controlled(Orchestrator):
-            def _provider(self, phase):
+            # R-11: _provider recibe ademas el plazo acotado al presupuesto.
+            def _provider(self, phase, timeout_seconds=None):
                 if phase == "triage": value = triage
                 elif phase == "consolidacion": value = "reporte"
                 else:

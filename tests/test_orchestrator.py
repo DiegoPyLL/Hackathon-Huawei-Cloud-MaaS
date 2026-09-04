@@ -79,7 +79,8 @@ class OrchestratorTests(unittest.TestCase):
                 yield {"type": "done", "mode": "mock", "model": "drip"}
 
         class Controlled(Orchestrator):
-            def _provider(self, phase):
+            # R-11: _provider recibe ademas el plazo acotado al presupuesto.
+            def _provider(self, phase, timeout_seconds=None):
                 return DripProvider()
 
         orchestrator = Controlled(self.config, presupuesto_seg=budget)
@@ -110,3 +111,76 @@ class OrchestratorTests(unittest.TestCase):
         with self.assertRaisesRegex(ProviderError, "plazo de reloj"):
             list(provider.stream([{"role": "user", "content": "hola"}]))
 
+
+
+class PlazoPorLlamadaTests(unittest.TestCase):
+    """R-11: el plazo por llamada y el presupuesto de corrida estaban descoordinados.
+
+    Sintoma medido en una corrida live real (4 incidentes, 3m16s): el triage
+    supero el plazo de 180s, la ProviderError escapo de stream() y la corrida
+    entera se perdio sin `done`. El embudo mostro 4/4 recogidos -> 0/4
+    detectados. Antes de N-01 el presupuesto de 150s cortaba DESPUES del triage
+    y entregaba algo; subir el presupuesto sin tocar el plazo por llamada lo
+    empeoro.
+    """
+
+    def setUp(self):
+        self.config = Config(mode="mock", api_key=None, base_url="https://unused/v2", model="demo")
+
+    def test_un_triage_que_agota_el_plazo_entrega_done_fallida(self):
+        class TriageQueRevienta:
+            def stream(self, messages):
+                raise ProviderError("Huawei MaaS superó el plazo de reloj de 180s sin cerrar el stream.")
+                yield  # pragma: no cover - hace de esto un generador
+
+        orchestrator = Orchestrator(self.config)
+        orchestrator._provider = lambda phase, timeout_seconds=None: TriageQueRevienta()
+
+        eventos = list(orchestrator.stream({"prompt": "MONITOREO 10:00 cpu.pct value=99"}))
+
+        final = eventos[-1]
+        self.assertEqual(final["type"], "done")
+        self.assertEqual(final["status"], "fallida")
+        self.assertIn("plazo de reloj", final["error"])
+        # La fase se declara antes del done, no se pierde el motivo.
+        fases = [e for e in eventos if e["type"] == "fase" and e["fase"] == "triage"]
+        self.assertEqual(fases[-1]["estado"], "fallida")
+        # La corrida queda guardada y consultable, no se evapora.
+        guardada = orchestrator.store.get(final["run_id"])
+        self.assertEqual(guardada["status"], "fallida")
+        self.assertEqual(guardada["trazas"][0]["phase"], "triage")
+
+    def test_el_plazo_de_la_llamada_se_acota_al_presupuesto_restante(self):
+        """Ninguna llamada puede consumir el presupuesto entero y encima fallar."""
+        plazos = []
+
+        class Registrador:
+            def stream(self, messages):
+                yield {"type": "delta", "delta": json.dumps(
+                    {"version": "1", "incidentes": [], "descartados": []})}
+                yield {"type": "done", "mode": "mock", "model": "x"}
+
+        config = Config(mode="mock", api_key=None, base_url="https://unused/v2",
+                        model="demo", timeout_seconds=180.0)
+        orchestrator = Orchestrator(config, presupuesto_seg=12.0)
+
+        def espia(phase, timeout_seconds=None):
+            plazos.append(timeout_seconds)
+            return Registrador()
+
+        orchestrator._provider = espia
+        list(orchestrator.stream({"prompt": "MONITOREO 10:00 cpu.pct value=99"}))
+
+        self.assertTrue(plazos, "no se registro ninguna llamada")
+        # El presupuesto (12s) manda sobre el timeout configurado (180s).
+        for plazo in plazos:
+            self.assertIsNotNone(plazo)
+            self.assertLessEqual(plazo, 12.0)
+
+    def test_sin_presupuesto_no_se_intenta_la_llamada(self):
+        orchestrator = Orchestrator(self.config, presupuesto_seg=0.0)
+        eventos = list(orchestrator.stream({"prompt": "MONITOREO 10:00 cpu.pct value=99"}))
+        final = eventos[-1]
+        self.assertEqual(final["type"], "done")
+        self.assertEqual(final["status"], "fallida")
+        self.assertIn("Sin presupuesto", final["error"])
