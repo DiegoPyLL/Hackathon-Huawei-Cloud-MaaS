@@ -452,19 +452,39 @@ try:
         threading.Thread(target=_correr_y_guardar, daemon=True).start()
         return {"estado": "disparada"}
 
+    # La pantalla sondea cada 4s y armar la foto cuesta tres llamadas HTTP a
+    # otros servicios. Sin cache, cada refresco reconsulta los tres canales; con
+    # varias pestañas abiertas eso es una estampida contra el propio stack.
+    CACHE_SEG = 3.0
+    _cache: dict = {"cuando": 0.0, "valor": None}
+
+    def _foto_sin_corrida() -> dict:
+        """Bloqueante a proposito: se llama desde un endpoint sincrono, que
+        FastAPI corre en su threadpool. Puesto en un `async def` bloquearia el
+        event loop de uvicorn y la pantalla se ahogaria a si misma."""
+        ahora = time.time()
+        if _cache["valor"] is not None and ahora - _cache["cuando"] < CACHE_SEG:
+            return _cache["valor"]
+        canales = recoger_evidencia()
+        verdad = _get(f"{BUS_URL}/api/verdad") or {}
+        foto = {
+            "trazabilidad": trazar(verdad, canales, {}),
+            "canales_caidos": [c for c, v in canales.items() if v is None],
+        }
+        _cache.update(cuando=ahora, valor=foto)
+        return foto
+
+    # Endpoint SINCRONO: FastAPI lo corre en un hilo del pool en vez de en el
+    # event loop. Con `async def` y urllib dentro, un sondeo rapido tumbaba el
+    # servicio — medido: :8020 se caia sola con la pagina abierta.
     @app.get("/api/trazabilidad")
-    async def api_trazabilidad():
+    def api_trazabilidad():
         """Lo que consume la pantalla. Sin corrida previa, devuelve solo la foto
         de la verdad y de los canales: ya es trazabilidad util."""
         corriendo = _corriendo.locked()
         if not _ultima:
-            canales = recoger_evidencia()
-            verdad = _get(f"{BUS_URL}/api/verdad") or {}
-            return {
-                "estado_corrida": "corriendo" if corriendo else "sin_corrida",
-                "trazabilidad": trazar(verdad, canales, {}),
-                "canales_caidos": [c for c, v in canales.items() if v is None],
-            }
+            return {"estado_corrida": "corriendo" if corriendo else "sin_corrida",
+                    **_foto_sin_corrida()}
         return {
             "estado_corrida": "corriendo" if corriendo else _ultima.get("estado_corrida", "terminada"),
             "trazabilidad": _ultima.get("trazabilidad", {}),
@@ -474,7 +494,7 @@ try:
         }
 
     @app.get("/api/evidencia")
-    async def api_evidencia():
+    def api_evidencia():
         canales = recoger_evidencia()
         return {"canales": canales, "volcado": armar_volcado(canales)}
 except ImportError:  # el CLI funciona sin FastAPI instalado
