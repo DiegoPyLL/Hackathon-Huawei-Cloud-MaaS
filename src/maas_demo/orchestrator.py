@@ -228,7 +228,24 @@ def validate_triage(value: Any, volcado: str = "") -> dict[str, Any]:
                 incident["evidencia_no_verificada"] = sin_anclar
     return value
 
-_PATRON_IDENTIFICADOR = re.compile(r"^(DEP-\d+|TRX-\d+|INC-\d+|ALRT-\d+|\d+\.\d+\.\d+\.\d+|svc-[a-z0-9-]+|host-[a-z0-9-]+|pod-[a-z0-9-]+)$")
+# Los prefijos salen de la clase `Ids` del generador de escenarios
+# (projects/monitoreo/generator), que es quien los acuña: ALRT, TRX, SES, CRED,
+# DEP, CTA, PED y HOST. El patron anterior cubria tres y era sensible a
+# mayusculas, asi que `HOST-12` —que el generador emite en mayusculas— pasaba
+# sin control.
+#
+# Se enumeran los prefijos en vez de aceptar cualquier `XXX-123`: sub-detectar
+# es preferible a sobre-detectar. Un identificador que se escapa del control
+# solo pierde una comprobacion; un patron que marca palabras normales rechaza
+# acciones legitimas y rompe la corrida.
+_PATRON_IDENTIFICADOR = re.compile(
+    r"^(?:"
+    r"(?:ALRT|TRX|SES|CRED|DEP|CTA|PED|HOST|INC)-\d+"      # ids acuñados por Ids
+    r"|\d{1,3}(?:\.\d{1,3}){3}"                            # IPv4
+    r"|(?:svc|host|pod)-[a-z0-9-]+"                         # nombres de servicio
+    r")$",
+    re.IGNORECASE,
+)
 
 def _identificadores_no_anclados(params: dict[str, Any], evidencia: list[str]) -> list[str]:
     """Valores de params con pinta de identificador que no aparecen en la evidencia citada."""
