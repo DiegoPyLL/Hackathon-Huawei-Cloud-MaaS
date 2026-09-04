@@ -57,3 +57,6 @@ Desktop.ini
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# El trinquete de la compuerta nocturna es estado local de la sesion.
+noche/.piso-tests
