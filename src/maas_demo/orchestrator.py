@@ -213,6 +213,18 @@ def _evidencia_anclada(evidencia: list[str], volcado: str) -> list[dict[str, Any
         resultado.append({"linea": linea, "verificada": verificada})
     return resultado
 
+_PATRON_IDENTIFICADOR = re.compile(r"^(DEP-\d+|TRX-\d+|INC-\d+|ALRT-\d+|\d+\.\d+\.\d+\.\d+|svc-[a-z0-9-]+|host-[a-z0-9-]+|pod-[a-z0-9-]+)$")
+
+def _identificadores_no_anclados(params: dict[str, Any], evidencia: list[str]) -> list[str]:
+    """Valores de params con pinta de identificador que no aparecen en la evidencia citada."""
+    evidencia_texto = " ".join(str(e) for e in evidencia)
+    no_anclados: list[str] = []
+    for valor in params.values():
+        valor_str = str(valor).strip()
+        if _PATRON_IDENTIFICADOR.fullmatch(valor_str) and valor_str not in evidencia_texto:
+            no_anclados.append(valor_str)
+    return no_anclados
+
 def validate_finding(value: Any, incident: dict[str, Any], specialist: str, volcado: str = "") -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("version") != "1": raise ValueError("Hallazgo sin version=1.")
     if value.get("incidente_id") != incident["id"] or value.get("especialista") != specialist: raise ValueError("Hallazgo no coincide con la tarea.")
@@ -244,6 +256,12 @@ def validate_finding(value: Any, incident: dict[str, Any], specialist: str, volc
                 value["accion_descartada"] = "La evidencia no ancla contra el volcado."
         else:
             value["evidencia_verificada"] = anclaje
+    if value.get("accion") is not None:
+        no_anclados = _identificadores_no_anclados(value["accion"].get("params", {}), value["evidencia"])
+        if no_anclados:
+            value["accion_descartada"] = f"Identificadores no anclados en la evidencia: {', '.join(no_anclados)}."
+            value["accion"] = None
+            value["viabilidad"] = "requiere_mas_datos"
     return value
 
 def build_tasks(triage: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
