@@ -26,7 +26,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from trazabilidad import trazar  # noqa: E402
+from trazabilidad import trazar, construir_linaje, construir_ruido, puntuar  # noqa: E402
 
 # La consola de Windows es cp1252 por defecto y los mensajes del chat traen emoji.
 if hasattr(sys.stdout, "reconfigure"):
@@ -155,7 +155,8 @@ def preguntar_al_agente(volcado: str) -> dict:
     return resultado
 
 
-def contrastar(triage: dict | None, verdad: dict) -> dict:
+def contrastar(triage: dict | None, verdad: dict,
+               hallazgos: list | None = None, canales: dict | None = None) -> dict:
     """Compara lo que el agente detecto contra lo que de verdad paso. El agente
     nunca ve esto; sale del groundtruth del bus."""
     reales = {i["incidente_id"]: i["tipo"] for i in verdad.get("incidentes", [])
@@ -173,6 +174,14 @@ def contrastar(triage: dict | None, verdad: dict) -> dict:
         "tipos_no_detectados": sorted(set(tipos_reales) - set(tipos_detectados)),
         "tipos_inventados": sorted(set(tipos_detectados) - set(tipos_reales)),
         "descartados": len(triage["descartados"]) if triage else 0,
+        # La comparacion por conjuntos de tipos de arriba se conserva porque
+        # es legible de un vistazo, pero NO es la puntuacion: premia acertar el
+        # tipo de otro incidente y castiga detectar el correcto con otro nombre.
+        # La puntuacion sale de la atribucion por evidencia.
+        "puntuacion": puntuar(
+            construir_linaje(verdad, triage, hallazgos or [], canales or {}),
+            construir_ruido(verdad, triage, canales or {})["falsos_positivos"],
+        ),
     }
 
 
@@ -186,7 +195,8 @@ def corrida() -> dict:
         "canales_caidos": [c for c, v in canales.items() if v is None],
         "volcado": volcado,
         "agente": resultado,
-        "contraste": contrastar(resultado.get("triage"), verdad),
+        "contraste": contrastar(resultado.get("triage"), verdad,
+                                resultado.get("hallazgos"), canales),
         "trazabilidad": trazar(verdad, canales, resultado),
     }
 
@@ -287,6 +297,23 @@ def main():
         print(f"  NO detecto                : {c['tipos_no_detectados']}")
     if c["tipos_inventados"]:
         print(f"  invento (no estaban)      : {c['tipos_inventados']}")
+
+    pt = c.get("puntuacion") or {}
+    if pt:
+        def pct(valor):
+            return "  n/a" if valor is None else f"{valor:>5.0%}"
+        print()
+        print("  PUNTUACION (atribucion por evidencia, no por tipo)")
+        print(f"    verdaderos positivos {pt['verdaderos_positivos']}"
+              f"  falsos positivos {pt['falsos_positivos']}"
+              f"  no detectados {pt['falsos_negativos']}")
+        print(f"    precision {pct(pt['precision'])}   recall {pct(pt['recall'])}"
+              f"   f1 {pct(pt['f1'])}")
+        print(f"    tipo      {pct(pt['exactitud_tipo'])}   severidad"
+              f" {pct(pt['exactitud_severidad'])}   ruteo {pct(pt['exactitud_ruteo'])}")
+        print(f"    accion esperada acertada {pct(pt['accion_correcta'])}")
+        if pt["no_detectados"]:
+            print(f"    se le escaparon: {', '.join(pt['no_detectados'])}")
 
     imprimir_trazabilidad(resultado.get("trazabilidad") or {})
 
