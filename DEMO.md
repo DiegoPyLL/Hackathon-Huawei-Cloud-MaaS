@@ -34,16 +34,18 @@ MAAS_MODE=live
 MAAS_API_KEY=<la key>
 MAAS_BASE_URL=https://ai.kostra.cloud/v1
 MAAS_MODEL=glm-5.2
-MAAS_TIMEOUT_SECONDS=180
+MAAS_TIMEOUT_SECONDS=280
 ```
 
 Dos cosas que cuestan una demo si se ignoran:
 
 - **Solo `glm-5.2` está habilitado.** `deepseek-v4-pro`, `deepseek-v3.2` y
   `qwen3-32b` devuelven **403**. Si el `.env` apunta a otro, todo falla.
-- **`MAAS_TIMEOUT_SECONDS` tiene que ser 180.** Con 45 (el default) un triage
-  real se corta por timeout: una llamada trivial tarda 6s, pero una con el
-  volcado completo pasa el minuto.
+- **`MAAS_TIMEOUT_SECONDS` tiene que ser 280.** Es el plazo de UNA llamada, y
+  el triage es la más cara del sistema: con glm-5.2 tarda entre 150 y 200s
+  según cuántos incidentes haya vivos. Con 180 quedaba justo en el borde —
+  algunas corridas entraban y otras morían, y parecía aleatorio. Con 45 (el
+  default) no entra ninguna.
 
 ## Paso 3 — Levantar los servicios
 
@@ -61,6 +63,7 @@ cuota: `--mock`.
 | 8028 | semáforo | Dashboard de estado + consola de logs |
 | 8001 | demo | Los 3 canales alimentando al agente |
 | 8080 | Agente 1 | Incident Response Agent |
+| 8020 | trazabilidad | Linaje de cada problema y conversión contra la verdad |
 
 Verificá que responden:
 
@@ -77,6 +80,10 @@ curl http://localhost:8010/api/verdad
    incidente **no se distingue visualmente** de la charla: esa es la gracia.
 3. **http://localhost:8001** — la demo del agente, con los 3 canales entrando.
 4. **http://localhost:8080** — el Agente 1.
+5. **http://localhost:8020** — la trazabilidad. Va **al final y después de la
+   corrida**, a propósito: es la que destapa el marcador. Muestra por dónde
+   salió cada problema, hasta dónde llegó, y la conversión de punta a punta
+   contra un groundtruth que el agente nunca vio.
 
 ## Paso 5 — Provocar un incidente
 
@@ -148,8 +155,17 @@ sí interviene sobre un objetivo real.
 
 ## Antes de pararte adelante
 
-**Una corrida `live` tarda ~2,5 minutos** (3 llamadas encadenadas contra Hong
-Kong). Opciones, en orden:
+**Una corrida `live` tarda entre 2,5 y 5 minutos**, medido, según cuántos
+incidentes haya vivos: el triage es una sola llamada y su coste crece con lo
+que tenga que clasificar. El presupuesto de corrida la corta a los 480s y
+entrega lo que haya en vez de colgarse.
+
+**Provocá uno o dos incidentes, no cuatro.** Con 1 la corrida entera son ~150s
+y sale 100% del embudo. Con 4 el triage se come casi todo el presupuesto y los
+especialistas quedan a medias. Es una limitación real y medida, no un capricho
+del guion.
+
+Opciones, en orden:
 
 1. Disparar la corrida **antes** de empezar a hablar y volver a ella
 2. Mostrar el flujo en `--mock` (instantáneo) y enseñar una corrida `live` ya

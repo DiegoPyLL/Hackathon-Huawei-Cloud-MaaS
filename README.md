@@ -80,7 +80,35 @@ la primera vez. Nunca se versionan `.env` ni credenciales reales.
 python3 -m src.maas_demo
 ```
 
-Abrir <http://127.0.0.1:8080>.
+Abrir <http://127.0.0.1:8080>. Eso levanta **solo el agente**, que es útil para
+pegarle un volcado a mano.
+
+## Ejecutar el sistema completo
+
+El agente por sí solo no demuestra correlación: hace falta que la señal venga de
+canales distintos, como en la realidad. Un comando levanta las seis piezas:
+
+```bash
+python3 projects/bus-incidentes/levantar_todo.py          # live
+python3 projects/bus-incidentes/levantar_todo.py --mock   # sin gastar cuota
+```
+
+| Puerto | Qué es |
+| --- | --- |
+| 8010 | Bus de incidentes. Fuente de verdad, sin UI |
+| 8000 | Dev chat: el equipo comenta los incidentes entre charla normal |
+| 8028 | Semáforo de servicios y consola de logs |
+| 8001 | Los tres canales alimentando al agente, con la cola de acciones propuestas |
+| 8080 | El Incident Response Agent |
+| 8020 | Trazabilidad: linaje de cada problema y conversión contra la verdad |
+
+Una corrida de punta a punta, que recoge los tres canales y los correlaciona:
+
+```bash
+python3 projects/agente-puente/puente.py
+```
+
+El guion completo, paso a paso, está en [`DEMO.md`](DEMO.md).
 
 ## Llegar y correr
 
@@ -128,6 +156,14 @@ python3 scripts/ejecutablesBase/prueba-humo.py --require-mode mock
 # Antes de presentar evidencia cloud real
 python3 scripts/ejecutablesBase/evaluar.py --mode live
 python3 scripts/ejecutablesBase/prueba-humo.py --url https://URL-DESPLEGADA --require-mode live
+
+# Verificación completa en un comando: árbol limpio, sin secretos versionados,
+# suite en verde, el número de tests no bajó, y el flujo corre en mock
+python3 scripts/ejecutablesBase/compuerta.py
+
+# Puntuación repetible sobre varios escenarios, con el stack levantado.
+# Contrasta contra un groundtruth que el agente nunca ve.
+python3 scripts/ejecutablesBase/puntuar.py --escenarios 6
 ```
 
 El último comando falla si el despliegue responde en `mock`; así una simulación
@@ -182,7 +218,9 @@ proveedor se muestra como fallo y nunca se convierte silenciosamente en `mock`.
 src/maas_demo/           Aplicación, proveedor MaaS y frontend
 tests/                   Contratos, streaming y API HTTP
 evals/                   Casos repetibles de evaluación
-scripts/                 Instalación, evaluación y smoke test
+scripts/                 Instalación, evaluación, compuerta y puntuación
+projects/bus-incidentes/ Bus: un incidente, varios canales que lo cuentan distinto
+projects/agente-puente/  Recoge los canales, corre al agente y lo puntúa (:8020)
 projects/incident-agent/ Tickets por correo, schema Supabase y borradores de email
 reinforcement-range/     Rango de pruebas aislado: contenedor vulnerable +
                          agente de hardening con shell real (ver ADR 0002)
